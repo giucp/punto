@@ -1,0 +1,13 @@
+{
+  "name": "Punto · Tu dirección digital",
+  "short_name": "Punto",
+  "description": "Dale una dirección digital a tu lugar.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fffefa",
+  "theme_color": "#fffefa",
+  "icons": [
+    { "src": "/assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

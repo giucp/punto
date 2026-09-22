@@ -138,7 +138,7 @@
       id: `PV-${Math.floor(1000000 + Math.random() * 9000000)}`,
       lat: point.lat, lng: point.lng
     };
-    localStorage.setItem('punto-place', JSON.stringify(place));
+    try { localStorage.setItem('punto-place', JSON.stringify(place)); } catch (_) { /* El enlace sigue siendo compartible. */ }
     show('resultStep');
   });
   $('share').addEventListener('click', async () => {
@@ -155,6 +155,7 @@
   });
   $('newPlace').addEventListener('click', () => {
     $('resultMenu').hidden = true;
+    try { localStorage.removeItem('punto-place'); } catch (_) { /* Continuar sin almacenamiento local. */ }
     $('placeName').value = '';
     $('reference').value = '';
     $('refCount').textContent = '0';
@@ -190,5 +191,16 @@
     };
     point = { lat: place.lat, lng: place.lng };
     show('resultStep');
+  } else {
+    try {
+      const saved = JSON.parse(localStorage.getItem('punto-place') || 'null');
+      if (saved && /^PV-\d{7}$/.test(saved.id) && typeof saved.name === 'string' &&
+          Number.isFinite(saved.lat) && Number.isFinite(saved.lng)) {
+        place = saved;
+        point = { lat: saved.lat, lng: saved.lng };
+        show('resultStep');
+      }
+    } catch (_) { /* Sin lugar guardado. */ }
   }
+  if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
 })();
