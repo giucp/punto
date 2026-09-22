@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f6f5f2">
+<title>Punto · Prototipo interactivo</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="workspace">
+  <header class="toolbar">
+    <div class="toolbar-brand"><span class="wordmark">Punto<i></i></span><span class="toolbar-subtitle">Prototipo de registro</span></div>
+    <div class="view-switch" role="group" aria-label="Modo de vista">
+      <button id="desktopMode" class="view-button selected" type="button" aria-pressed="true"><span class="mode-icon">▣</span> Escritorio</button>
+      <button id="mobileMode" class="view-button" type="button" aria-pressed="false"><span class="mode-icon">▯</span> Móvil</button>
+    </div>
+  </header>
+  <nav class="screen-nav" aria-label="Pantallas del registro">
+    <button data-screen="0" class="selected">01 <span>Bienvenida</span></button>
+    <button data-screen="1">02 <span>Mapa</span></button>
+    <button data-screen="2">03 <span>Confirmación</span></button>
+    <button data-screen="3">04 <span>Datos</span></button>
+    <button data-screen="4">05 <span>Resultado</span></button>
+  </nav>
+  <main class="stage" id="stage">
+    <div class="stage-viewport" id="stageViewport">
+      <div class="desktop-canvas" id="desktopCanvas"><img src="mockup.png" width="1983" height="793" alt="Las cinco pantallas del registro de Punto"><div id="desktopHotspots"></div></div>
+      <div class="phone-canvas" id="phoneCanvas"><img class="phone-image" id="phoneImage" src="mockup.png" width="1983" height="793" alt="Pantalla activa del registro de Punto"><div id="phoneOverlays"></div></div>
+    </div>
+    <div class="stage-controls" id="stageControls"><button id="prevScreen" type="button" aria-label="Pantalla anterior">←</button><span id="screenCount">1 / 5</span><button id="nextScreen" type="button" aria-label="Pantalla siguiente">→</button></div>
+  </main>
+  <footer class="footer"><span id="modeHint">Haz clic en una pantalla para abrirla y usarla.</span><span>Diseño basado en el mockup elegido</span></footer>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="app.js"></script>
+</body>
+</html>
