@@ -1,14 +1,31 @@
 (() => {
-  const $ = (id) => document.getElementById(id);
-  const screens = ['welcome', 'mapStep', 'confirmStep', 'dataStep', 'resultStep'];
-  const origin = 'https://punto-registro-interactivo.giuseppebambini.chatgpt.site/';
-  const initial = { lat: 10.5001, lng: -66.8780 };
-  let point = { ...initial };
-  let map;
-  let confirmMap;
-  let place = { name: 'Casa de Ana', type: 'Casa', reference: '', id: 'PV-2847193', ...initial };
-  let toastTimer;
+  'use strict';
 
+  const $ = (id) => document.getElementById(id);
+  const C = window.PuntoCode;
+
+  const TYPES = {
+    casa: { label: 'Casa', icon: 'i-house' },
+    edificio: { label: 'Edificio', icon: 'i-building' },
+    negocio: { label: 'Negocio', icon: 'i-store' }
+  };
+  const DEFAULT_VIEW = { lat: 10.5001, lng: -66.8780, zoom: 14 }; // La Florida, Caracas
+  const MIN_ZOOM_TO_PICK = 17;
+  const NOMINATIM = 'https://nominatim.openstreetmap.org';
+  const MAP_HINT = 'Ubica el punto exacto de tu casa, negocio<br>o lugar.';
+
+  const state = {
+    draft: null,     // { code, lat, lng, area } mientras se registra un lugar
+    type: 'casa',
+    current: null,   // lugar mostrado en la pantalla final
+    justSaved: false,
+    satellite: false,
+    locatedOnce: false
+  };
+
+  /* ---------- Utilidades ---------- */
+
+  let toastTimer;
   function notify(message) {
     const el = $('toast');
     el.textContent = message;
@@ -17,213 +34,640 @@
     toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
   }
 
-  function areaFor(p) {
-    if (p.lat > 10.46 && p.lat < 10.55 && p.lng > -66.93 && p.lng < -66.82) return 'La Florida, Caracas';
-    if (p.lat > 10.40 && p.lat < 10.57 && p.lng > -67.02 && p.lng < -66.75) return 'Caracas, Distrito Capital';
-    return `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`;
+  const store = {
+    get(key, fallback) {
+      try { const v = JSON.parse(localStorage.getItem(key)); return v ?? fallback; } catch (_) { return fallback; }
+    },
+    set(key, value) {
+      try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch (_) { return false; }
+    }
+  };
+
+  const placeKey = (p) => [p.code, p.unit, p.name].map((v) => (v || '').trim().toLowerCase()).join('|');
+  const myPlaces = () => store.get('punto:places', []).filter((p) => p && !C.decode(p.code || '').error);
+  const isMine = (p) => myPlaces().some((m) => placeKey(m) === placeKey(p));
+
+  function savePlace(p) {
+    const { lat, lng, ...data } = p; // la ubicación se recalcula siempre desde el código
+    const list = myPlaces().filter((m) => placeKey(m) !== placeKey(p));
+    list.unshift({ ...data, saved: Date.now() });
+    return store.set('punto:places', list.slice(0, 50));
+  }
+  function removePlace(p) {
+    store.set('punto:places', myPlaces().filter((m) => placeKey(m) !== placeKey(p)));
   }
 
-  function makeTileLayer() {
-    return L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19, attribution: '© OpenStreetMap contributors'
-    });
+  function placeHash(p) {
+    const q = new URLSearchParams();
+    if (p.name) q.set('n', p.name);
+    if (p.type && TYPES[p.type]) q.set('t', p.type);
+    if (p.unit) q.set('u', p.unit);
+    if (p.ref) q.set('r', p.ref);
+    if (p.area) q.set('a', p.area);
+    const query = q.toString();
+    return `#/p/${p.code}${query ? '?' + query : ''}`;
   }
+  // Los datos van después de "#": el servidor nunca recibe nombre ni referencia.
+  const placeURL = (p) => `${location.origin}${location.pathname}${placeHash(p)}`;
+
+  function shareText(p) {
+    const lines = [`📍 ${p.name || 'Mi Punto'}`, `Código Punto: ${C.format(p.code)}`];
+    if (p.unit) lines.push(p.unit);
+    if (p.ref) lines.push(`Referencia: ${p.ref}`);
+    return lines.join('\n');
+  }
+
+  async function copy(text, okMessage) {
+    try {
+      await navigator.clipboard.writeText(text);
+      notify(okMessage);
+    } catch (_) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;opacity:0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      ta.remove();
+      notify(ok ? okMessage : 'No se pudo copiar');
+    }
+  }
+
+  const gmapsURL = (p) => `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`;
+  const wazeURL = (p) => `https://waze.com/ul?ll=${p.lat},${p.lng}&navigate=yes`;
+
+  /* ---------- Nombres de zona (OpenStreetMap / Nominatim) ---------- */
+
+  const areaCache = new Map();
+  let areaController;
+
+  function areaFromAddress(a = {}) {
+    const local = a.neighbourhood || a.suburb || a.quarter || a.residential || a.hamlet || a.village;
+    const city = a.city || a.town || a.municipality || a.county || a.state;
+    return [local, city].filter((v, i, arr) => v && arr.indexOf(v) === i).join(', ');
+  }
+
+  async function reverseArea(lat, lng) {
+    const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+    if (areaCache.has(key)) return areaCache.get(key);
+    areaController?.abort();
+    areaController = new AbortController();
+    const url = `${NOMINATIM}/reverse?format=jsonv2&zoom=17&accept-language=es&lat=${lat}&lon=${lng}`;
+    const res = await fetch(url, { signal: areaController.signal });
+    if (!res.ok) throw new Error('reverse');
+    const area = areaFromAddress((await res.json()).address);
+    areaCache.set(key, area);
+    return area;
+  }
+
+  /* ---------- Mapas ---------- */
+
+  function baseLayer(satellite) {
+    return satellite
+      ? L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+          maxZoom: 20, maxNativeZoom: 18, attribution: 'Imágenes © Esri, Maxar'
+        })
+      : L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 20, maxNativeZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'
+        });
+  }
+
+  const maps = [];
+  function newMap(id, options = {}) {
+    const map = L.map(id, { zoomControl: false, ...options });
+    map.attributionControl?.setPrefix(false);
+    map._base = baseLayer(state.satellite).addTo(map);
+    map.getContainer().classList.toggle('muted', !state.satellite);
+    maps.push(map);
+    return map;
+  }
+
+  function setSatellite(on) {
+    state.satellite = on;
+    store.set('punto:satellite', on);
+    maps.forEach((map) => {
+      map.removeLayer(map._base);
+      map._base = baseLayer(on).addTo(map);
+      map.getContainer().classList.toggle('muted', !on);
+    });
+    $('layer').setAttribute('aria-pressed', String(on));
+    $('layer').setAttribute('aria-label', on ? 'Vista de mapa' : 'Vista satélite');
+  }
+
+  const dotIcon = L.divIcon({ className: '', html: '<div class="dot-marker"></div>', iconSize: [48, 48], iconAnchor: [24, 24] });
+  const userIcon = L.divIcon({ className: '', html: '<div class="user-dot"></div>', iconSize: [14, 14], iconAnchor: [7, 7] });
+
+  /* ---------- 2 · Mover el mapa hasta la entrada ---------- */
+
+  let map;
+  let userMarker;
+  let areaTimer;
 
   function initMap() {
-    if (!map) {
-      map = L.map('map', { zoomControl: false, attributionControl: false, scrollWheelZoom: false })
-        .setView([point.lat, point.lng], 15);
-      makeTileLayer().addTo(map);
-      map.on('moveend', () => {
-        const center = map.getCenter();
-        point = { lat: center.lat, lng: center.lng };
-      });
-    }
-    requestAnimationFrame(() => {
-      map.invalidateSize();
-      map.setView([point.lat, point.lng], map.getZoom(), { animate: false });
+    if (map) return;
+    const last = store.get('punto:lastView', DEFAULT_VIEW);
+    map = newMap('map', { maxZoom: 20 }).setView([last.lat, last.lng], last.zoom);
+    map.on('movestart', () => { $('mapStep').classList.add('moving'); $('searchResults').hidden = true; });
+    map.on('moveend', () => {
+      $('mapStep').classList.remove('moving');
+      updateMapHint();
+      const c = map.getCenter();
+      store.set('punto:lastView', { lat: c.lat, lng: c.lng, zoom: map.getZoom() });
+      clearTimeout(areaTimer);
+      areaTimer = setTimeout(updatePill, 700); // respeta el límite de uso de Nominatim
     });
+    map.on('zoomend', updateMapHint);
   }
 
-  function initConfirmMap() {
-    if (!confirmMap) {
-      confirmMap = L.map('confirmMap', {
-        zoomControl: false, attributionControl: false, dragging: false,
-        touchZoom: false, doubleClickZoom: false, scrollWheelZoom: false,
-        boxZoom: false, keyboard: false
-      }).setView([point.lat, point.lng], 17);
-      makeTileLayer().addTo(confirmMap);
+  function updateMapHint() {
+    const c = map.getCenter();
+    const hint = $('mapHint');
+    const btn = $('confirmPoint');
+    hint.classList.remove('warn');
+    if (!C.inCoverage(c.lat, c.lng)) {
+      hint.textContent = 'Punto por ahora solo funciona dentro de Venezuela.';
+      hint.classList.add('warn');
+      btn.disabled = true;
+    } else if (map.getZoom() < MIN_ZOOM_TO_PICK) {
+      hint.textContent = 'Acércate más al mapa para marcar la entrada exacta.';
+      btn.disabled = true;
+    } else {
+      hint.innerHTML = MAP_HINT;
+      btn.disabled = false;
     }
-    requestAnimationFrame(() => {
-      confirmMap.invalidateSize();
-      confirmMap.setView([point.lat, point.lng], 17, { animate: false });
+  }
+
+  async function updatePill() {
+    const c = map.getCenter();
+    if (!C.inCoverage(c.lat, c.lng)) { $('pillText').textContent = 'Fuera de Venezuela'; return; }
+    if (map.getZoom() < 13) return;
+    try {
+      const area = await reverseArea(c.lat, c.lng);
+      if (area) $('pillText').textContent = area;
+    } catch (_) { /* Se conserva el último nombre. */ }
+  }
+
+  function locate({ quiet = false } = {}) {
+    if (!navigator.geolocation) { if (!quiet) notify('Ubicación no disponible'); return; }
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        const at = [coords.latitude, coords.longitude];
+        if (!userMarker) userMarker = L.marker(at, { icon: userIcon, interactive: false, keyboard: false }).addTo(map);
+        else userMarker.setLatLng(at);
+        map.setView(at, 19);
+        notify(coords.accuracy > 25 ? 'Ubicación aproximada: mueve el mapa hasta tu puerta' : 'Mueve el mapa para ajustar la entrada');
+      },
+      (err) => {
+        if (quiet && err.code === err.PERMISSION_DENIED) return;
+        notify(err.code === err.PERMISSION_DENIED ? 'Permiso de ubicación denegado. Toca la zona para buscar.' : 'No se pudo obtener tu ubicación');
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }
+    );
+  }
+
+  function openSearch(open) {
+    $('pill').hidden = open;
+    $('searchForm').hidden = !open;
+    if (open) { $('searchInput').value = ''; $('searchInput').focus(); }
+    else $('searchResults').hidden = true;
+  }
+
+  async function search(query) {
+    const list = $('searchResults');
+    const status = document.createElement('li');
+    status.className = 'empty';
+    status.textContent = 'Buscando…';
+    list.replaceChildren(status);
+    list.hidden = false;
+    try {
+      const url = `${NOMINATIM}/search?format=jsonv2&countrycodes=ve&limit=6&accept-language=es&q=${encodeURIComponent(query)}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('search');
+      const results = await res.json();
+      if (!results.length) { status.textContent = 'Sin resultados. Prueba con el nombre de la urbanización o barrio.'; return; }
+      list.replaceChildren(...results.map((r) => {
+        const [title, ...rest] = r.display_name.split(', ');
+        const li = document.createElement('li');
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = title;
+        const small = document.createElement('small');
+        small.textContent = rest.filter((s) => s !== 'Venezuela').join(', ');
+        b.append(small);
+        b.addEventListener('click', () => {
+          openSearch(false);
+          $('pillText').textContent = title;
+          map.setView([+r.lat, +r.lon], r.place_rank >= 26 ? 18 : 16);
+        });
+        li.append(b);
+        return li;
+      }));
+    } catch (_) {
+      status.textContent = 'No se pudo buscar. Revisa tu conexión.';
+    }
+  }
+
+  /* ---------- 3 · Aquí está ---------- */
+
+  let confirmMap;
+  function renderConfirm() {
+    const d = state.draft;
+    if (!confirmMap) {
+      confirmMap = newMap('confirmMap', {
+        dragging: false, touchZoom: false, doubleClickZoom: false, scrollWheelZoom: false, boxZoom: false, keyboard: false
+      });
+    }
+    confirmMap.setView([d.lat, d.lng], 18, { animate: false });
+    $('confirmedArea').textContent = (d.area || 'Venezuela') + '.';
+    if (!d.area) {
+      reverseArea(d.lat, d.lng).then((area) => {
+        if (state.draft !== d || !area) return;
+        d.area = area;
+        $('confirmedArea').textContent = area + '.';
+      }).catch(() => {});
+    }
+  }
+
+  /* ---------- 4 · Datos del lugar ---------- */
+
+  function setType(type) {
+    state.type = type;
+    document.querySelectorAll('.type').forEach((b) => {
+      const on = b.dataset.type === type;
+      b.classList.toggle('selected', on);
+      b.setAttribute('aria-checked', String(on));
     });
-    $('confirmedArea').textContent = areaFor(point) + '.';
+    $('unitField').hidden = type === 'casa';
+    $('placeUnit').placeholder = type === 'negocio' ? 'Ej. Local 12, planta baja' : 'Ej. Piso 4, apto 4-B';
+  }
+
+  function resetForm() {
+    $('placeForm').reset();
+    $('refCount').textContent = '0';
+    $('nameError').hidden = true;
+    $('placeName').removeAttribute('aria-invalid');
+    setType('casa');
+  }
+
+  /* ---------- 5 · Dirección digital ---------- */
+
+  let miniMap;
+  let miniMarker;
+  let qrToken = 0;
+
+  function renderResult(p) {
+    state.current = p;
+    const mine = isMine(p);
+    const page = $('resultStep');
+    page.classList.toggle('received', !mine);
+
+    if (state.justSaved) {
+      $('resultTitle').textContent = 'Tu dirección digital está lista.';
+      $('resultSub').textContent = 'Fácil de compartir. Difícil de perder.';
+    } else if (mine) {
+      $('resultTitle').textContent = 'Tu dirección digital.';
+      $('resultSub').textContent = 'Fácil de compartir. Difícil de perder.';
+    } else {
+      $('resultTitle').textContent = 'Te compartieron un Punto.';
+      $('resultSub').textContent = 'Ábrelo en tu app de mapas para llegar.';
+    }
+    state.justSaved = false;
+
+    $('resultName').textContent = p.name || (TYPES[p.type]?.label ?? 'Punto');
+    const areaText = () => [p.unit, p.area].filter(Boolean).join(' · ');
+    $('resultArea').textContent = areaText() || 'Venezuela';
+    $('resultId').textContent = C.format(p.code);
+    $('resultRef').hidden = !p.ref;
+    $('resultRef').textContent = p.ref ? `“${p.ref}”` : '';
+
+    if (!p.area) {
+      reverseArea(p.lat, p.lng).then((area) => {
+        if (state.current !== p || !area) return;
+        p.area = area;
+        $('resultArea').textContent = areaText();
+      }).catch(() => {});
+    }
+
+    $('gmaps').href = gmapsURL(p);
+    $('waze').href = wazeURL(p);
+    $('mSave').hidden = mine;
+    $('mDelete').hidden = !mine;
+    $('mNew').hidden = !mine;
+    $('mPlaque').hidden = !mine;
+
+    if (mine) {
+      const token = ++qrToken;
+      window.PuntoQR.toDataURL(placeURL(p), { margin: 1, width: 256, color: { dark: '#111820', light: '#ffffff' } })
+        .then((data) => { if (token === qrToken) $('qr').src = data; });
+    } else {
+      requestAnimationFrame(() => {
+        if (!miniMap) {
+          miniMap = newMap('miniMap', { maxZoom: 20, attributionControl: false });
+          miniMarker = L.marker([p.lat, p.lng], { icon: dotIcon, interactive: false, keyboard: false }).addTo(miniMap);
+        }
+        miniMap.invalidateSize();
+        miniMarker.setLatLng([p.lat, p.lng]);
+        miniMap.setView([p.lat, p.lng], 17, { animate: false });
+      });
+    }
+  }
+
+  function toggleMenu(open) {
+    const menu = $('resultMenu');
+    menu.hidden = open === undefined ? !menu.hidden : !open;
+    $('more').setAttribute('aria-expanded', String(!menu.hidden));
+  }
+
+  async function downloadPlaque(p) {
+    const W = 1080;
+    const H = 1350;
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    const font = (w, s) => `${w} ${s}px Inter, -apple-system, "Segoe UI", Roboto, Arial, sans-serif`;
+
+    ctx.fillStyle = '#fffefa';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = '#15181c';
+    ctx.font = font(800, 66);
+    ctx.textAlign = 'center';
+    const bw = ctx.measureText('Punto').width;
+    ctx.fillText('Punto', W / 2 - 12, 150);
+    ctx.fillStyle = '#1454e8';
+    ctx.beginPath();
+    ctx.arc(W / 2 - 12 + bw / 2 + 20, 106, 13, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#15181c';
+    ctx.font = font(700, 64);
+    const full = p.name || 'Mi Punto';
+    let name = full;
+    while (ctx.measureText(name).width > W - 160 && name.length > 4) name = name.slice(0, -1);
+    ctx.fillText(name === full ? name : name + '…', W / 2, 290);
+    ctx.fillStyle = '#69707a';
+    ctx.font = font(500, 36);
+    ctx.fillText([p.unit, p.area].filter(Boolean).join(' · ') || 'Venezuela', W / 2, 346);
+
+    ctx.fillStyle = '#e7edfc';
+    ctx.beginPath();
+    ctx.roundRect((W - 760) / 2, 400, 760, 124, 62);
+    ctx.fill();
+    ctx.fillStyle = '#20365d';
+    ctx.font = font(800, 76);
+    ctx.fillText(C.format(p.code), W / 2, 488);
+
+    const qr = document.createElement('canvas');
+    await window.PuntoQR.toCanvas(qr, placeURL(p), { width: 560, margin: 0, color: { dark: '#111820', light: '#ffffff' } });
+    ctx.drawImage(qr, (W - 560) / 2, 580, 560, 560);
+
+    ctx.fillStyle = '#48515d';
+    ctx.font = font(500, 36);
+    ctx.fillText('Escanea para llegar', W / 2, 1220);
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    const filename = `punto-${C.format(p.code)}.png`;
+    const file = new File([blob], filename, { type: 'image/png' });
+    if (navigator.canShare?.({ files: [file] }) && matchMedia('(pointer: coarse)').matches) {
+      try { await navigator.share({ files: [file], title: 'Mi placa Punto' }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+
+  /* ---------- Hojas: código y mis puntos ---------- */
+
+  function openSheet(id) {
+    closeSheets();
+    $('scrim').hidden = false;
+    $(id).hidden = false;
+    if (id === 'codeSheet') {
+      $('codeError').textContent = '';
+      setTimeout(() => $('codeInput').focus(), 50);
+    }
+    if (id === 'placesSheet') renderPlacesList();
+  }
+  function closeSheets() {
+    $('scrim').hidden = true;
+    $('codeSheet').hidden = true;
+    $('placesSheet').hidden = true;
+  }
+
+  function renderPlacesList() {
+    $('placesList').replaceChildren(...myPlaces().map((p) => {
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.type = 'button';
+      const icon = document.createElement('span');
+      icon.className = 'icon';
+      icon.innerHTML = `<svg><use href="#${(TYPES[p.type] || TYPES.casa).icon}"/></svg>`;
+      const txt = document.createElement('span');
+      txt.className = 'txt';
+      const name = document.createElement('b');
+      name.textContent = [p.name, p.unit].filter(Boolean).join(' · ');
+      const code = document.createElement('small');
+      code.textContent = C.format(p.code);
+      txt.append(name, code);
+      b.append(icon, txt);
+      b.addEventListener('click', () => { closeSheets(); go(placeHash(p)); });
+      li.append(b);
+      return li;
+    }));
+  }
+
+  function renderWelcome() {
+    const n = myPlaces().length;
+    $('openPlaces').hidden = !n;
+    $('placesCount').textContent = n ? `(${n})` : '';
+  }
+
+  /* ---------- Navegación ---------- */
+
+  function go(hash, replace = false) {
+    if (replace) location.replace(hash);
+    else location.hash = hash;
+  }
+
+  function parseRoute() {
+    const [path, query = ''] = location.hash.slice(1).split('?');
+    if (path.startsWith('/p/')) {
+      const decoded = C.decode(decodeURIComponent(path.slice(3)));
+      if (decoded.error) return { screen: 'welcome', codeError: decoded.error };
+      const q = new URLSearchParams(query);
+      const at = { code: decoded.code, lat: decoded.lat, lng: decoded.lng };
+      // Si solo llegó el código y ese lugar está guardado aquí, se muestran sus datos.
+      if (!q.get('n')) {
+        const saved = myPlaces().find((p) => p.code === decoded.code);
+        if (saved) return { screen: 'resultStep', place: { ...saved, ...at } };
+      }
+      const type = q.get('t');
+      return {
+        screen: 'resultStep',
+        place: {
+          ...at,
+          name: (q.get('n') || '').slice(0, 48),
+          type: TYPES[type] ? type : '',
+          unit: (q.get('u') || '').slice(0, 30),
+          ref: (q.get('r') || '').slice(0, 100),
+          area: (q.get('a') || '').slice(0, 80)
+        }
+      };
+    }
+    if (path === '/mapa') return { screen: 'mapStep' };
+    if (path === '/aqui') return state.draft ? { screen: 'confirmStep' } : { redirect: '#/mapa' };
+    if (path === '/datos') return state.draft ? { screen: 'dataStep' } : { redirect: '#/mapa' };
+    return { screen: 'welcome' };
   }
 
   function show(screen) {
-    screens.forEach((id) => $(id).classList.toggle('active', id === screen));
-    $('resultMenu').hidden = true;
-    if (screen === 'mapStep') initMap();
-    if (screen === 'confirmStep') initConfirmMap();
-    if (screen === 'resultStep') renderResult();
+    document.querySelectorAll('.page').forEach((s) => s.classList.toggle('active', s.id === screen));
+    $(screen).scrollTop = 0;
+    toggleMenu(false);
+    closeSheets();
   }
 
-  function setType(type) {
-    place.type = type;
-    document.querySelectorAll('.type').forEach((button) => {
-      const selected = button.dataset.type === type;
-      button.classList.toggle('selected', selected);
-      button.setAttribute('aria-pressed', String(selected));
-    });
-  }
+  function route() {
+    const r = parseRoute();
+    if (r.redirect) return go(r.redirect, true);
+    show(r.screen);
 
-  function shareURL() {
-    const url = new URL(origin);
-    url.searchParams.set('id', place.id);
-    url.searchParams.set('n', place.name);
-    url.searchParams.set('t', place.type);
-    url.searchParams.set('lat', place.lat.toFixed(6));
-    url.searchParams.set('lng', place.lng.toFixed(6));
-    if (place.reference) url.searchParams.set('r', place.reference);
-    return url.toString();
-  }
-
-  function renderResult() {
-    $('resultName').textContent = place.name;
-    $('resultArea').textContent = areaFor(place);
-    $('resultId').textContent = place.id;
-    if (window.PuntoQR) {
-      window.PuntoQR.toDataURL(shareURL(), { margin: 1, width: 256, color: { dark: '#111820', light: '#ffffff' } })
-        .then((data) => { $('qr').src = data; })
-        .catch(() => { $('qr').src = 'qr.svg'; });
+    if (r.screen === 'welcome') {
+      renderWelcome();
+      if (r.codeError) { openSheet('codeSheet'); $('codeError').textContent = r.codeError; }
+    } else if (r.screen === 'mapStep') {
+      initMap();
+      openSearch(false);
+      requestAnimationFrame(() => { map.invalidateSize(); updateMapHint(); updatePill(); });
+      if (!state.locatedOnce) { state.locatedOnce = true; locate({ quiet: true }); }
+    } else if (r.screen === 'confirmStep') {
+      renderConfirm();
+      requestAnimationFrame(() => { confirmMap.invalidateSize(); confirmMap.setView([state.draft.lat, state.draft.lng], 18, { animate: false }); });
+    } else if (r.screen === 'resultStep') {
+      renderResult(r.place);
     }
   }
 
-  async function copyLink() {
-    try {
-      await navigator.clipboard.writeText(shareURL());
-      notify('Enlace copiado');
-    } catch (_) {
-      notify('Abre el menú de compartir para copiar el enlace');
-    }
-  }
+  /* ---------- Eventos ---------- */
 
-  $('start').addEventListener('click', () => show('mapStep'));
-  $('confirmPoint').addEventListener('click', () => show('confirmStep'));
-  $('backToMap').addEventListener('click', () => show('mapStep'));
-  $('continueToForm').addEventListener('click', () => show('dataStep'));
-  $('backToConfirm').addEventListener('click', () => show('confirmStep'));
-  $('locate').addEventListener('click', () => {
-    if (!navigator.geolocation) return notify('Ubicación no disponible');
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        point = { lat: coords.latitude, lng: coords.longitude };
-        map.setView([point.lat, point.lng], 17, { animate: true });
-        notify('Mueve el mapa para ajustar la entrada');
-      },
-      () => notify('No se pudo obtener tu ubicación'),
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+  document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => go(b.dataset.go)));
+
+  $('start').addEventListener('click', () => { state.draft = null; resetForm(); go('#/mapa'); });
+  $('openCode').addEventListener('click', () => openSheet('codeSheet'));
+  $('openPlaces').addEventListener('click', () => openSheet('placesSheet'));
+  $('scrim').addEventListener('click', closeSheets);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeSheets(); toggleMenu(false); openSearch(false); } });
+
+  $('codeForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const value = $('codeInput').value.trim();
+    if (!value) { $('codeError').textContent = 'Escribe el código que te enviaron.'; return; }
+    const linkHash = value.match(/#\/p\/.+$/); // también acepta el enlace completo pegado
+    const decoded = linkHash ? null : C.decode(value);
+    if (decoded?.error) { $('codeError').textContent = decoded.error; return; }
+    $('codeInput').value = '';
+    closeSheets();
+    go(linkHash ? linkHash[0] : `#/p/${decoded.code}`);
   });
-  document.querySelectorAll('.type').forEach((button) => button.addEventListener('click', () => setType(button.dataset.type)));
+  $('codeInput').addEventListener('input', () => { $('codeError').textContent = ''; });
+
+  $('pill').addEventListener('click', () => openSearch(true));
+  $('searchInput').addEventListener('blur', () => setTimeout(() => {
+    if (!$('searchInput').value.trim() && $('searchResults').hidden) openSearch(false);
+  }, 150));
+  function runSearch() {
+    const q = $('searchInput').value.trim();
+    if (q.length >= 3) search(q);
+  }
+  $('searchForm').addEventListener('submit', (e) => { e.preventDefault(); runSearch(); });
+  $('searchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); runSearch(); } });
+
+  $('locate').addEventListener('click', () => locate());
+  $('layer').addEventListener('click', () => setSatellite(!state.satellite));
+
+  $('confirmPoint').addEventListener('click', () => {
+    const c = map.getCenter();
+    const code = C.encode(c.lat, c.lng);
+    if (!code) return;
+    const { lat, lng } = C.decode(code); // centro de la celda: igual a lo que verá quien reciba el código
+    const pill = $('pillText').textContent;
+    const area = /Fuera|Caracas, Distrito Capital/.test(pill) ? '' : pill;
+    state.draft = { code, lat, lng, area };
+    go('#/aqui');
+  });
+
+  document.querySelectorAll('.type').forEach((b) => b.addEventListener('click', () => setType(b.dataset.type)));
   $('reference').addEventListener('input', () => { $('refCount').textContent = $('reference').value.length; });
-  $('refCount').textContent = $('reference').value.length;
-  $('placeForm').addEventListener('submit', (event) => {
-    event.preventDefault();
-    const name = $('placeName').value.trim();
-    if (!name) { $('placeName').focus(); return; }
-    place = {
-      name, type: place.type, reference: $('reference').value.trim(),
-      id: `PV-${Math.floor(1000000 + Math.random() * 9000000)}`,
-      lat: point.lat, lng: point.lng
-    };
-    try { localStorage.setItem('punto-place', JSON.stringify(place)); } catch (_) { /* El enlace sigue siendo compartible. */ }
-    show('resultStep');
-  });
-  $('share').addEventListener('click', async () => {
-    if (navigator.share) {
-      try { await navigator.share({ title: `${place.name} · ${place.id}`, text: 'Mi dirección digital en Punto', url: shareURL() }); }
-      catch (error) { if (error.name !== 'AbortError') copyLink(); }
-    } else copyLink();
-  });
-  $('more').addEventListener('click', () => { $('resultMenu').hidden = !$('resultMenu').hidden; });
-  $('copyLink').addEventListener('click', () => { $('resultMenu').hidden = true; copyLink(); });
-  $('viewMap').addEventListener('click', () => {
-    window.open(`https://www.openstreetmap.org/?mlat=${place.lat}&mlon=${place.lng}#map=18/${place.lat}/${place.lng}`, '_blank', 'noopener');
-    $('resultMenu').hidden = true;
-  });
-  $('newPlace').addEventListener('click', () => {
-    $('resultMenu').hidden = true;
-    try { localStorage.removeItem('punto-place'); } catch (_) { /* Continuar sin almacenamiento local. */ }
-    $('placeName').value = '';
-    $('reference').value = '';
-    $('refCount').textContent = '0';
-    setType('Casa');
-    show('mapStep');
-  });
-  $('mobileView').addEventListener('click', () => {
-    $('app').classList.remove('wide');
-    $('mobileView').classList.add('active');
-    $('desktopView').classList.remove('active');
-    updatePreviewScale();
-    if (map) setTimeout(() => map.invalidateSize(), 100);
-    if (confirmMap) setTimeout(() => confirmMap.invalidateSize(), 100);
-  });
-  $('desktopView').addEventListener('click', () => {
-    $('app').classList.add('wide');
-    $('desktopView').classList.add('active');
-    $('mobileView').classList.remove('active');
-    updatePreviewScale();
-    if (map) setTimeout(() => map.invalidateSize(), 100);
-    if (confirmMap) setTimeout(() => confirmMap.invalidateSize(), 100);
-  });
-  $('mobileView').classList.add('active');
+  $('placeName').addEventListener('input', () => { $('nameError').hidden = true; $('placeName').removeAttribute('aria-invalid'); });
 
-  function updatePreviewScale() {
-    const app = $('app');
-    if (window.innerWidth >= 500 && !app.classList.contains('wide') && window.innerHeight < 780) {
-      app.style.position = 'fixed';
-      app.style.left = '50%';
-      app.style.top = '50%';
-      app.style.height = '760px';
-      app.style.transform = `translate(-50%, -50%) scale(${Math.min(1, (window.innerHeight - 18) / 760)})`;
-    } else {
-      app.style.position = '';
-      app.style.left = '';
-      app.style.top = '';
-      app.style.height = '';
-      app.style.transform = '';
+  $('placeForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = $('placeName').value.trim().replace(/\s+/g, ' ');
+    if (!name) {
+      $('nameError').hidden = false;
+      $('placeName').setAttribute('aria-invalid', 'true');
+      $('placeName').focus();
+      return;
     }
-    if (map) requestAnimationFrame(() => map.invalidateSize());
-    if (confirmMap) requestAnimationFrame(() => confirmMap.invalidateSize());
-  }
-  window.addEventListener('resize', updatePreviewScale);
-  updatePreviewScale();
-
-  const params = new URLSearchParams(location.search);
-  const sharedId = params.get('id');
-  const sharedLat = Number(params.get('lat'));
-  const sharedLng = Number(params.get('lng'));
-  if (/^PV-\d{7}$/.test(sharedId || '') && Number.isFinite(sharedLat) && Number.isFinite(sharedLng) &&
-      Math.abs(sharedLat) <= 90 && Math.abs(sharedLng) <= 180) {
-    place = {
-      id: sharedId, name: (params.get('n') || 'Mi lugar').slice(0, 48),
-      type: params.get('t') === 'Negocio' ? 'Negocio' : 'Casa',
-      reference: (params.get('r') || '').slice(0, 100), lat: sharedLat, lng: sharedLng
+    const place = {
+      ...state.draft,
+      name,
+      type: state.type,
+      unit: state.type === 'casa' ? '' : $('placeUnit').value.trim(),
+      ref: $('reference').value.trim().replace(/\s+/g, ' ')
     };
-    point = { lat: place.lat, lng: place.lng };
-    show('resultStep');
-  } else {
-    try {
-      const saved = JSON.parse(localStorage.getItem('punto-place') || 'null');
-      if (saved && /^PV-\d{7}$/.test(saved.id) && typeof saved.name === 'string' &&
-          Number.isFinite(saved.lat) && Number.isFinite(saved.lng)) {
-        place = saved;
-        point = { lat: saved.lat, lng: saved.lng };
-        show('resultStep');
-      }
-    } catch (_) { /* Sin lugar guardado. */ }
+    if (!savePlace(place)) notify('No se pudo guardar en este teléfono, pero puedes compartir el enlace');
+    state.draft = null;
+    state.justSaved = true;
+    resetForm();
+    go(placeHash(place), true);
+  });
+
+  $('resultId').addEventListener('click', () => copy(C.format(state.current.code), 'Código copiado'));
+
+  $('share').addEventListener('click', async () => {
+    const p = state.current;
+    if (navigator.share) {
+      try { await navigator.share({ title: p.name || 'Mi Punto', text: shareText(p), url: placeURL(p) }); return; }
+      catch (err) { if (err.name === 'AbortError') return; }
+    }
+    copy(`${shareText(p)}\n${placeURL(p)}`, 'Dirección copiada para compartir');
+  });
+
+  $('more').addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(); });
+  document.addEventListener('click', (e) => { if (!$('resultMenu').hidden && !$('resultMenu').contains(e.target)) toggleMenu(false); });
+  const menuAction = (id, fn) => $(id).addEventListener('click', () => { toggleMenu(false); fn(state.current); });
+  menuAction('mCopyCode', (p) => copy(C.format(p.code), 'Código copiado'));
+  menuAction('mCopyLink', (p) => copy(placeURL(p), 'Enlace copiado'));
+  menuAction('mWhatsapp', (p) => window.open(`https://wa.me/?text=${encodeURIComponent(`${shareText(p)}\n\n${placeURL(p)}`)}`, '_blank', 'noopener'));
+  menuAction('mGmaps', (p) => window.open(gmapsURL(p), '_blank', 'noopener'));
+  menuAction('mWaze', (p) => window.open(wazeURL(p), '_blank', 'noopener'));
+  menuAction('mPlaque', (p) => downloadPlaque(p).catch(() => notify('No se pudo crear la placa')));
+  menuAction('mNew', () => $('start').click());
+  menuAction('mSave', (p) => {
+    if (!savePlace(p)) { notify('No se pudo guardar en este navegador'); return; }
+    notify('Guardado en tus puntos');
+    renderResult(p);
+  });
+  menuAction('mDelete', (p) => {
+    if (!confirm('¿Eliminar este lugar de tus puntos? El código sigue funcionando para quien ya lo tenga.')) return;
+    removePlace(p);
+    notify('Eliminado de tus puntos');
+    go('#/');
+  });
+
+  /* ---------- Arranque ---------- */
+
+  state.satellite = store.get('punto:satellite', false) === true;
+  $('layer').setAttribute('aria-pressed', String(state.satellite));
+  window.addEventListener('hashchange', route);
+  route();
+
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
   }
-  if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
 })();

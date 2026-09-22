@@ -1,14 +1,208 @@
 <!doctype html>
-<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#fffefa"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default"><title>Punto · Tu dirección digital</title><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="assets/icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="assets/icon-180.png"><link rel="stylesheet" href="assets/leaflet.css"><link rel="stylesheet" href="style.css"></head><body>
-<svg class="art-filter" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><filter id="artAlpha" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  -3.33 -3.33 -3.33 0 9.6"/></filter></svg>
-<div class="preview-tools" aria-label="Tamaño de pantalla"><span>Vista</span><button id="mobileView" type="button" title="Vista móvil" aria-label="Vista móvil">▯</button><button id="desktopView" type="button" title="Vista escritorio" aria-label="Vista escritorio">▣</button></div>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#fffefa">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="description" content="Dale una dirección digital a tu lugar. Fácil de compartir. Siempre te encuentra.">
+  <meta name="referrer" content="strict-origin">
+  <title>Punto · Tu dirección digital</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/icon-180.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="assets/leaflet.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12Z"/><circle cx="12" cy="10" r="2.3"/></symbol>
+  <symbol id="i-locate" viewBox="0 0 24 24"><path d="M20 4 3.5 11.2l7 2.3 2.3 7z"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 4 8.5 4.5L12 13 3.5 8.5z"/><path d="m3.5 12.5 8.5 4.5 8.5-4.5"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5m6-6-6 6 6 6"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 15V3m0 0L8 7m4-4 4 4M5 11v9h14v-9"/></symbol>
+  <symbol id="i-house" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v11h-6v-7H9v7H3z"/></symbol>
+  <symbol id="i-building" viewBox="0 0 24 24"><path d="M5 21V4h10v17M15 9h4v12M3 21h18M8 8h1.5M11 8h1.5M8 12h1.5M11 12h1.5M8 16h1.5M11 16h1.5"/></symbol>
+  <symbol id="i-store" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="1.5"/><path d="M9 8V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V8M4 13h16"/></symbol>
+</svg>
+
 <div class="shell" id="app">
-  <main class="pages">
-    <section id="welcome" class="page welcome active" aria-labelledby="welcomeTitle"><header class="brandrow"><div class="brand">Punto<i></i></div><small>Venezuela<br>más cerca</small></header><div class="welcome-copy"><h1 id="welcomeTitle">Dale una<br>dirección digital<br>a tu lugar.</h1><p>Fácil de compartir.<br>Siempre te encuentra.</p></div><div class="city-art" role="img" aria-label="Ilustración del Ávila y Caracas"><img src="mockup.png" alt=""></div><div class="welcome-bottom"><button class="primary" id="start" type="button">Comenzar</button><small>Un país más conectado</small></div></section>
-    <section id="mapStep" class="page map-page" aria-label="Selecciona la entrada"><div id="map" class="leaflet-map"></div><div class="map-crosshair" aria-hidden="true"><i></i></div><div class="map-top"><span class="location-pill"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12Z"/><circle cx="12" cy="10" r="2.3"/></svg>Caracas, Distrito Capital</span><button id="locate" class="map-locate" type="button" aria-label="Usar mi ubicación">➤</button></div><small class="map-attribution">© OpenStreetMap contributors</small><div class="bottom-sheet"><i class="handle"></i><h2>Mueve el mapa hasta la entrada</h2><p>Ubica el punto exacto de tu casa, negocio<br>o lugar.</p><button class="primary" id="confirmPoint" type="button">Confirmar ubicación</button></div></section>
-    <section id="confirmStep" class="page confirm-page" aria-labelledby="confirmTitle"><div id="confirmMap" class="confirm-map"></div><div class="selected-dot" aria-hidden="true"></div><button class="circle-back" id="backToMap" type="button" aria-label="Volver al mapa">‹</button><div class="bottom-sheet confirm-sheet"><i class="handle"></i><h2 id="confirmTitle">Aquí está.</h2><p>Tu punto ha sido ubicado en<br><span id="confirmedArea">La Florida, Caracas.</span></p><button class="primary" id="continueToForm" type="button">Continuar</button></div></section>
-    <section id="dataStep" class="page data-page" aria-labelledby="formTitle"><header class="step-header"><button class="plain-back" id="backToConfirm" type="button" aria-label="Volver">‹</button><div class="brand">Punto<i></i></div><span class="dots-menu" aria-hidden="true">•••</span></header><div class="progress-dots" aria-label="Paso 2 de 3"><i class="current"></i><i></i><i></i></div><form id="placeForm"><h2 id="formTitle">Cuéntanos sobre tu lugar</h2><label for="placeName">Nombre del lugar</label><input id="placeName" maxlength="48" required value="Casa de Ana" autocomplete="off"><label>Tipo de lugar</label><div class="types" role="group" aria-label="Tipo de lugar"><button class="type selected" type="button" data-type="Casa" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v11h-6v-7H9v7H3z"/></svg><span>Casa</span><i>✓</i></button><button class="type" type="button" data-type="Negocio" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10h18v11H3zM5 10l2-6h10l2 6M9 21v-7h6v7"/></svg><span>Negocio</span><i>✓</i></button></div><label for="reference">Referencia <span class="optional">(opcional)</span></label><input id="reference" maxlength="100" value="Frente al parque, portón gris." autocomplete="off"><small class="counter"><span id="refCount">30</span>/100</small><button class="primary save" type="submit">Guardar</button></form></section>
-    <section id="resultStep" class="page result-page" aria-labelledby="resultTitle"><header class="result-header"><div class="brand">Punto<i></i></div><button id="more" type="button" aria-label="Más opciones">•••</button></header><div class="result-intro"><div class="rays" aria-hidden="true"><i></i><i></i><i></i></div><h2 id="resultTitle">Tu dirección digital está lista.</h2><p>Fácil de compartir. Difícil de perder.</p></div><article class="place-card"><h3 id="resultName">Casa de Ana</h3><p id="resultArea">La Florida, Caracas</p><strong id="resultId">PV-2847193</strong><img id="qr" src="qr.svg" alt="Código QR de la dirección digital"><small>Escanea para llegar</small></article><button class="primary share" id="share" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3m0 0L8 7m4-4 4 4M5 11v9h14v-9"/></svg>Compartir</button><p class="signature">Los buenos lugares<br>también se encuentran</p><div class="result-menu" id="resultMenu" hidden><button id="copyLink" type="button">Copiar enlace</button><button id="viewMap" type="button">Ver en mapa</button><button id="newPlace" type="button">Registrar otro lugar</button></div></section>
-  </main>
+
+  <!-- 1 · Bienvenida -->
+  <section id="welcome" class="page welcome" aria-labelledby="welcomeTitle">
+    <header class="brandrow">
+      <div class="brand">Punto<i></i></div>
+      <small>Venezuela<br>más cerca</small>
+    </header>
+    <div class="welcome-copy">
+      <h1 id="welcomeTitle">Dale una<br>dirección digital<br>a tu lugar.</h1>
+      <p>Fácil de compartir.<br>Siempre te encuentra.</p>
+    </div>
+    <div class="city-art"><img src="assets/avila.png" alt="Ilustración del Ávila y Caracas" width="676" height="488"></div>
+    <div class="welcome-bottom">
+      <button class="primary" id="start" type="button">Comenzar</button>
+      <div class="welcome-links">
+        <button type="button" class="text-link" id="openCode">¿Te pasaron un código?</button>
+        <button type="button" class="text-link" id="openPlaces" hidden>Mis puntos <span id="placesCount"></span></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 · Mover el mapa hasta la entrada -->
+  <section id="mapStep" class="page map-page" aria-label="Selecciona la entrada">
+    <div class="map-area">
+      <div id="map" class="leaflet-map"></div>
+      <div class="map-crosshair" aria-hidden="true"><i></i></div>
+      <div class="map-top">
+        <button class="location-pill" id="pill" type="button" aria-label="Buscar zona">
+          <svg><use href="#i-pin"/></svg><span id="pillText">Caracas, Distrito Capital</span>
+        </button>
+        <form class="search-pill" id="searchForm" role="search" autocomplete="off" hidden>
+          <svg><use href="#i-search"/></svg>
+          <input id="searchInput" type="search" placeholder="Urbanización, barrio o calle" enterkeyhint="search" aria-label="Buscar zona">
+        </form>
+        <button id="locate" class="map-round" type="button" aria-label="Usar mi ubicación"><svg><use href="#i-locate"/></svg></button>
+      </div>
+      <ul class="search-results" id="searchResults" hidden></ul>
+      <button id="layer" class="map-round map-layer" type="button" aria-label="Vista satélite" aria-pressed="false"><svg><use href="#i-layers"/></svg></button>
+      <button class="map-round map-back" data-go="#/" type="button" aria-label="Volver al inicio"><svg><use href="#i-back"/></svg></button>
+    </div>
+    <div class="bottom-sheet">
+      <i class="handle"></i>
+      <h2>Mueve el mapa hasta la entrada</h2>
+      <p id="mapHint">Ubica el punto exacto de tu casa, negocio<br>o lugar.</p>
+      <button class="primary" id="confirmPoint" type="button">Confirmar ubicación</button>
+    </div>
+  </section>
+
+  <!-- 3 · Aquí está -->
+  <section id="confirmStep" class="page confirm-page" aria-labelledby="confirmTitle">
+    <div class="map-area">
+      <div id="confirmMap" class="leaflet-map"></div>
+      <div class="selected-dot" aria-hidden="true"></div>
+      <button class="circle-back" data-go="#/mapa" type="button" aria-label="Volver al mapa"><svg><use href="#i-back"/></svg></button>
+    </div>
+    <div class="bottom-sheet">
+      <i class="handle"></i>
+      <h2 id="confirmTitle" class="big-title">Aquí está.</h2>
+      <p>Tu punto ha sido ubicado en<br><span id="confirmedArea">Venezuela.</span></p>
+      <button class="primary" data-go="#/datos" type="button">Continuar</button>
+    </div>
+  </section>
+
+  <!-- 4 · Datos del lugar -->
+  <section id="dataStep" class="page data-page" aria-labelledby="formTitle">
+    <header class="step-header">
+      <button class="plain-back" data-go="#/aqui" type="button" aria-label="Volver"><svg><use href="#i-chev"/></svg></button>
+      <div class="brand">Punto<i></i></div>
+      <span></span>
+    </header>
+    <div class="progress-dots" aria-label="Paso 2 de 3"><i class="done"></i><i class="current"></i><i></i></div>
+    <form id="placeForm" novalidate>
+      <h2 id="formTitle">Cuéntanos sobre tu lugar</h2>
+
+      <label for="placeName">Nombre del lugar</label>
+      <input id="placeName" maxlength="48" required autocomplete="off" placeholder="Ej. Casa de Ana">
+      <small class="field-error" id="nameError" hidden>Escribe un nombre para reconocer tu lugar.</small>
+
+      <span class="label" id="typeLabel">Tipo de lugar</span>
+      <div class="types" role="radiogroup" aria-labelledby="typeLabel">
+        <button class="type selected" type="button" role="radio" data-type="casa" aria-checked="true"><svg><use href="#i-house"/></svg><span>Casa</span><i></i></button>
+        <button class="type" type="button" role="radio" data-type="edificio" aria-checked="false"><svg><use href="#i-building"/></svg><span>Edificio</span><i></i></button>
+        <button class="type" type="button" role="radio" data-type="negocio" aria-checked="false"><svg><use href="#i-store"/></svg><span>Negocio</span><i></i></button>
+      </div>
+
+      <div id="unitField" hidden>
+        <label for="placeUnit">Piso / apartamento <span class="optional">(opcional)</span></label>
+        <input id="placeUnit" maxlength="30" autocomplete="off" placeholder="Ej. Piso 4, apto 4-B">
+      </div>
+
+      <label for="reference">Referencia <span class="optional">(opcional)</span></label>
+      <input id="reference" maxlength="100" autocomplete="off" placeholder="Ej. Frente al parque, portón gris.">
+      <small class="counter"><span id="refCount">0</span>/100</small>
+
+      <button class="primary save" type="submit">Guardar</button>
+    </form>
+  </section>
+
+  <!-- 5 · Dirección digital (propia o recibida) -->
+  <section id="resultStep" class="page result-page" aria-labelledby="resultTitle">
+    <header class="result-header">
+      <button class="plain-back" data-go="#/" type="button" aria-label="Inicio"><svg><use href="#i-chev"/></svg></button>
+      <div class="brand">Punto<i></i></div>
+      <button id="more" class="more" type="button" aria-label="Más opciones" aria-expanded="false">•••</button>
+    </header>
+    <div class="result-intro">
+      <div class="rays" aria-hidden="true"><i></i><i></i><i></i></div>
+      <h2 id="resultTitle">Tu dirección digital está lista.</h2>
+      <p id="resultSub">Fácil de compartir. Difícil de perder.</p>
+    </div>
+    <article class="place-card">
+      <h3 id="resultName"></h3>
+      <p id="resultArea"></p>
+      <button class="code-pill" id="resultId" type="button" aria-label="Copiar código"></button>
+      <p class="card-ref" id="resultRef" hidden></p>
+      <div class="own-only">
+        <img id="qr" alt="Código QR de la dirección digital" width="112" height="112">
+        <small>Escanea para llegar</small>
+      </div>
+      <div class="received-only mini-map" id="miniMap"></div>
+    </article>
+    <div class="own-only">
+      <button class="primary share" id="share" type="button"><svg><use href="#i-share"/></svg>Compartir</button>
+    </div>
+    <div class="received-only route-row">
+      <a class="primary" id="gmaps" target="_blank" rel="noopener">Google Maps</a>
+      <a class="secondary" id="waze" target="_blank" rel="noopener">Waze</a>
+    </div>
+    <img class="signature" src="assets/firma.png" alt="Los buenos lugares también se encuentran" width="436" height="200">
+
+    <div class="result-menu" id="resultMenu" hidden>
+      <button id="mCopyCode" type="button">Copiar código</button>
+      <button id="mWhatsapp" type="button">Enviar por WhatsApp</button>
+      <button id="mCopyLink" type="button">Copiar enlace</button>
+      <button id="mGmaps" type="button">Cómo llegar · Google Maps</button>
+      <button id="mWaze" type="button">Cómo llegar · Waze</button>
+      <button id="mPlaque" type="button">Descargar placa con QR</button>
+      <button id="mSave" type="button">Guardar en mis puntos</button>
+      <button id="mNew" type="button">Registrar otro lugar</button>
+      <button id="mDelete" type="button" class="danger">Eliminar de mis puntos</button>
+    </div>
+  </section>
+
+  <!-- Hojas inferiores -->
+  <div class="scrim" id="scrim" hidden></div>
+
+  <section class="sheet-modal" id="codeSheet" role="dialog" aria-modal="true" aria-labelledby="codeTitle" hidden>
+    <i class="handle"></i>
+    <h2 id="codeTitle">¿Te pasaron un código?</h2>
+    <p>Escríbelo tal como te lo enviaron y te llevamos al punto exacto.</p>
+    <form id="codeForm" autocomplete="off" novalidate>
+      <input id="codeInput" class="code-input" inputmode="text" autocapitalize="characters" spellcheck="false" placeholder="PV-XXX-XXX-XXX" maxlength="200" aria-describedby="codeError">
+      <small class="field-error" id="codeError" aria-live="polite"></small>
+      <button class="primary" type="submit">Buscar</button>
+    </form>
+  </section>
+
+  <section class="sheet-modal" id="placesSheet" role="dialog" aria-modal="true" aria-labelledby="placesTitle" hidden>
+    <i class="handle"></i>
+    <h2 id="placesTitle">Mis puntos</h2>
+    <p>Guardados en este teléfono.</p>
+    <ul class="places-list" id="placesList"></ul>
+  </section>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </div>
-<div class="toast" id="toast" role="status"></div><script src="assets/leaflet.js"></script><script src="assets/qrcode.js"></script><script src="app.js"></script></body></html>
+
+<script src="assets/leaflet.js"></script>
+<script src="assets/qrcode.js"></script>
+<script src="code.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

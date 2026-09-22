@@ -1,14 +1,17 @@
 {
   "name": "Punto · Tu dirección digital",
   "short_name": "Punto",
-  "description": "Dale una dirección digital a tu lugar.",
-  "start_url": "/",
-  "scope": "/",
+  "description": "Dale a tu casa o negocio una dirección digital exacta y compártela con un código.",
+  "lang": "es-VE",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#fffefa",
   "theme_color": "#fffefa",
   "icons": [
-    { "src": "/assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png" }
   ]
 }
