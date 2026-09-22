@@ -54,3 +54,4 @@
  .shell.wide .city-art{width:240px;height:auto;aspect-ratio:340/245;right:20px;bottom:13%}
  .shell.wide .welcome-bottom{left:35px;right:auto;bottom:55px;width:230px}
 }
+@media(min-width:500px) and (max-width:899px){.shell.wide .city-art img{width:583.24%;height:auto;left:-10%;top:-155.10%}}
