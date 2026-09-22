@@ -76,12 +76,14 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .welcome { background: linear-gradient(180deg, #fffefa 0%, #fffdfa 23%, #faf7f2 54%, #fffefa 88%); }
 .brandrow { flex: none; height: 67px; padding: 21px 26px 0; display: flex; justify-content: space-between; align-items: flex-start; }
 .brandrow small { font-size: 10px; line-height: 1.12; text-align: right; font-weight: 550; color: #363a40; }
-.welcome-copy { flex: none; padding: clamp(20px, 8vh, 80px) 26px 0; position: relative; z-index: 2; }
+.welcome-copy { flex: none; padding: clamp(16px, 6vh, 64px) 26px 0; position: relative; z-index: 2; }
 .welcome-copy h1 { font-size: clamp(32px, 10vw, 38px); line-height: 1.02; letter-spacing: -1.5px; font-weight: 740; margin: 0 0 15px; }
 .welcome-copy p { font-size: 17px; line-height: 1.38; color: #6b6f77; margin: 0; }
-.city-art { flex: 1; min-height: 120px; display: flex; align-items: flex-end; justify-content: center; pointer-events: none; }
+/* La ilustración siempre ocupa todo el ancho, como en el mockup; si falta alto,
+   sube por detrás del texto (arriba solo tiene cielo y el sol). */
+.city-art { flex: 1; min-height: 150px; position: relative; pointer-events: none; }
 .city-art img {
-  display: block; width: 100%; max-width: 420px; height: 100%; object-fit: contain; object-position: bottom center;
+  position: absolute; left: 0; bottom: 0; display: block; width: 100%; height: auto;
   -webkit-mask-image: linear-gradient(to right, transparent, #000 3%, #000 97%, transparent);
   mask-image: linear-gradient(to right, transparent, #000 3%, #000 97%, transparent);
 }
