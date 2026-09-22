@@ -1,25 +1,194 @@
-const PHONE_WIDTH=396,ART_WIDTH=1983,ART_HEIGHT=793,OFFSETS=[0,396,792,1188,1584];
-const names=['Bienvenida','Mapa','Confirmación','Datos','Resultado'];
-const stage=document.getElementById('stage'),viewport=document.getElementById('stageViewport');
-const desktopCanvas=document.getElementById('desktopCanvas'),phoneCanvas=document.getElementById('phoneCanvas');
-const phoneImage=document.getElementById('phoneImage'),overlays=document.getElementById('phoneOverlays');
-const navButtons=[...document.querySelectorAll('.screen-nav button')];
-let mode='desktop',active=0,placeName='Casa de Ana',reference='Frente al parque, portón gris.',placeType='Casa',panX=0,panY=0,toastTimer;
-function element(tag,cls,styles,parent){const node=document.createElement(tag);if(cls)node.className=cls;if(styles)Object.assign(node.style,styles);if(parent)parent.appendChild(node);return node}
-function hotspot(label,x,y,w,h,fn){const button=element('button','hotspot',{left:x+'px',top:y+'px',width:w+'px',height:h+'px'},overlays);button.type='button';button.setAttribute('aria-label',label);button.title=label;button.addEventListener('click',fn);return button}
-function showToast(message){const node=document.getElementById('toast');node.textContent=message;node.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>node.classList.remove('show'),2400)}
-function switchMode(next){mode=next;document.getElementById('desktopMode').classList.toggle('selected',next==='desktop');document.getElementById('mobileMode').classList.toggle('selected',next==='mobile');document.getElementById('desktopMode').setAttribute('aria-pressed',next==='desktop');document.getElementById('mobileMode').setAttribute('aria-pressed',next==='mobile');stage.classList.toggle('mobile',next==='mobile');desktopCanvas.classList.toggle('active',next==='desktop');phoneCanvas.classList.toggle('active',next==='mobile');document.getElementById('modeHint').textContent=next==='desktop'?'Haz clic en una pantalla para abrirla y usarla.':'Desliza el mapa y recorre las pantallas con las flechas.';render()}
-function openScreen(index,focus=true){active=Math.max(0,Math.min(4,index));if(focus)mode='mobile';switchMode(mode)}
-function fitStage(){const isDesktop=mode==='desktop',baseWidth=isDesktop?ART_WIDTH:PHONE_WIDTH;const availableW=Math.max(1,stage.clientWidth-24),availableH=Math.max(1,stage.clientHeight-(isDesktop?24:42));const scale=Math.min(availableW/baseWidth,availableH/ART_HEIGHT,isDesktop?1:1.2);viewport.style.width=baseWidth*scale+'px';viewport.style.height=ART_HEIGHT*scale+'px';desktopCanvas.style.transform=`scale(${scale})`;phoneCanvas.style.transform=`scale(${scale})`}
-function render(){navButtons.forEach((b,i)=>{b.classList.toggle('selected',i===active);b.setAttribute('aria-current',i===active?'step':'false')});phoneImage.style.left=-OFFSETS[active]+'px';phoneImage.alt='Pantalla '+(active+1)+': '+names[active];document.getElementById('screenCount').textContent=(active+1)+' / 5';document.getElementById('prevScreen').disabled=active===0;document.getElementById('nextScreen').disabled=active===4;renderOverlays();fitStage()}
-function renderOverlays(){overlays.replaceChildren();if(active===0){hotspot('Comenzar',55,646,300,50,()=>openScreen(1));return}
-if(active===1){const windowNode=element('div','map-pan-window',null,overlays);windowNode.setAttribute('aria-label','Mapa interactivo. Arrastra para mover el mapa bajo la mira.');const layer=element('div','map-pan-layer',null,windowNode);const mapImage=element('img','',null,layer);mapImage.src='mockup.png';mapImage.alt='';mapImage.draggable=false;element('div','map-erase',null,layer);const cross=element('span','map-fixed-cross',null,windowNode);element('i','',null,cross);function applyPan(){layer.style.setProperty('--pan-x',panX+'px');layer.style.setProperty('--pan-y',panY+'px')}applyPan();let dragging=false,sx=0,sy=0,bx=0,by=0;windowNode.addEventListener('pointerdown',e=>{dragging=true;sx=e.clientX;sy=e.clientY;bx=panX;by=panY;windowNode.classList.add('dragging');windowNode.setPointerCapture(e.pointerId)});windowNode.addEventListener('pointermove',e=>{if(!dragging)return;const ratio=PHONE_WIDTH/viewport.clientWidth;panX=Math.max(-28,Math.min(28,bx+(e.clientX-sx)*ratio));panY=Math.max(-31,Math.min(31,by+(e.clientY-sy)*ratio));applyPan()});const stop=()=>{dragging=false;windowNode.classList.remove('dragging')};windowNode.addEventListener('pointerup',stop);windowNode.addEventListener('pointercancel',stop);hotspot('Centrar mapa',315,85,48,48,()=>{panX=panY=0;applyPan();showToast('Mapa centrado')});hotspot('Confirmar ubicación',48,654,303,51,()=>openScreen(2));return}
-if(active===2){hotspot('Volver al mapa',43,88,48,50,()=>openScreen(1));hotspot('Continuar',48,654,304,50,()=>openScreen(3));return}
-if(active===3){hotspot('Volver a la confirmación',30,88,41,52,()=>openScreen(2));const nameInput=element('input','overlay-input name',null,overlays);nameInput.type='text';nameInput.value=placeName;nameInput.maxLength=48;nameInput.setAttribute('aria-label','Nombre del lugar');nameInput.addEventListener('input',()=>placeName=nameInput.value);const refInput=element('input','overlay-input reference',null,overlays);refInput.type='text';refInput.value=reference;refInput.maxLength=100;refInput.setAttribute('aria-label','Referencia opcional');const counter=element('span','reference-count',null,overlays);counter.textContent=reference.length+'/100';refInput.addEventListener('input',()=>{reference=refInput.value;counter.textContent=reference.length+'/100'});const options=[{key:'Casa',cls:'home',label:'Casa',icon:'<path d="m3 10 9-7 9 7v10H3zM9 20v-7h6v7"/>'},{key:'Negocio',cls:'business',label:'Negocio',icon:'<path d="M3 10h18v10H3zM5 10l2-6h10l2 6M9 20v-6h6v6"/>'}];for(const option of options){const button=element('button','choice '+option.cls+(placeType===option.key?' selected':''),null,overlays);button.type='button';button.setAttribute('aria-label','Tipo de lugar: '+option.label);button.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true">'+option.icon+'</svg><span>'+option.label+'</span><i>✓</i>';button.addEventListener('click',()=>{placeType=option.key;overlays.querySelectorAll('.choice').forEach(x=>x.classList.toggle('selected',x===button))})}hotspot('Guardar y generar dirección',52,649,294,50,()=>{if(!placeName.trim()){nameInput.focus();showToast('Escribe el nombre del lugar');return}openScreen(4)});return}
-if(active===4){if(placeName.trim()!=='Casa de Ana'){const title=element('div','live-name',null,overlays);title.textContent=placeName.trim()}const qr=element('img','live-qr',null,overlays);qr.src='qr.svg';qr.alt='QR de PV-2847193';hotspot('Compartir dirección',44,568,309,51,share);hotspot('Más opciones',321,85,41,48,showMore)}}
-async function copyLink(){const value='https://punto.ve/PV-2847193';try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(value)}else{const input=document.createElement('textarea');input.value=value;document.body.appendChild(input);input.select();if(!document.execCommand('copy'))throw new Error('copy failed');input.remove()}showToast('Enlace copiado')}catch{showToast('Dirección: PV-2847193')}}
-async function share(){const data={title:placeName.trim()+' · Punto',text:'Encuéntrame con mi dirección digital: PV-2847193',url:'https://punto.ve/PV-2847193'};if(navigator.share){try{await navigator.share(data)}catch(error){if(error.name!=='AbortError')await copyLink()}}else await copyLink()}
-function showMore(){const old=overlays.querySelector('.more-menu');if(old){old.remove();return}const menu=element('div','more-menu',{position:'absolute',zIndex:'8',left:'173px',top:'126px',width:'178px',padding:'7px',background:'#fff',border:'1px solid #e4e4e0',borderRadius:'10px',boxShadow:'0 8px 25px #171a2033'},overlays);for(const [label,fn] of [['Copiar enlace',copyLink],['Registrar otro lugar',()=>{placeName='Casa de Ana';reference='Frente al parque, portón gris.';placeType='Casa';panX=panY=0;openScreen(0)}]]){const item=element('button','',{display:'block',width:'100%',padding:'10px',border:'0',background:'#fff',borderRadius:'6px',textAlign:'left',fontSize:'12px'},menu);item.textContent=label;item.addEventListener('click',fn)}}
-const hotspots=document.getElementById('desktopHotspots');OFFSETS.forEach((x,i)=>{const button=element('button','desktop-phone',{left:x+'px'},hotspots);button.type='button';button.setAttribute('aria-label','Abrir '+names[i]+' en modo móvil');const label=element('span','',null,button);label.textContent='Abrir '+names[i];button.addEventListener('click',()=>openScreen(i))});
-navButtons.forEach((b,i)=>b.addEventListener('click',()=>openScreen(i)));document.getElementById('desktopMode').addEventListener('click',()=>switchMode('desktop'));document.getElementById('mobileMode').addEventListener('click',()=>switchMode('mobile'));document.getElementById('prevScreen').addEventListener('click',()=>openScreen(active-1));document.getElementById('nextScreen').addEventListener('click',()=>openScreen(active+1));document.addEventListener('keydown',e=>{if(['INPUT','TEXTAREA'].includes(document.activeElement?.tagName))return;if(e.key==='ArrowRight')openScreen(active+1);if(e.key==='ArrowLeft')openScreen(active-1);if(e.key==='Escape')switchMode('desktop')});new ResizeObserver(fitStage).observe(stage);switchMode('desktop');
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const screens = ['welcome', 'mapStep', 'confirmStep', 'dataStep', 'resultStep'];
+  const origin = 'https://punto-registro-interactivo.giuseppebambini.chatgpt.site/';
+  const initial = { lat: 10.5001, lng: -66.8780 };
+  let point = { ...initial };
+  let map;
+  let confirmMap;
+  let place = { name: 'Casa de Ana', type: 'Casa', reference: '', id: 'PV-2847193', ...initial };
+  let toastTimer;
 
+  function notify(message) {
+    const el = $('toast');
+    el.textContent = message;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+  }
+
+  function areaFor(p) {
+    if (p.lat > 10.46 && p.lat < 10.55 && p.lng > -66.93 && p.lng < -66.82) return 'La Florida, Caracas';
+    if (p.lat > 10.40 && p.lat < 10.57 && p.lng > -67.02 && p.lng < -66.75) return 'Caracas, Distrito Capital';
+    return `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`;
+  }
+
+  function makeTileLayer() {
+    return L.tileLayer('https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19, attribution: '© OpenStreetMap contributors · © CARTO'
+    });
+  }
+
+  function initMap() {
+    if (!map) {
+      map = L.map('map', { zoomControl: false, attributionControl: false, scrollWheelZoom: false })
+        .setView([point.lat, point.lng], 15);
+      makeTileLayer().addTo(map);
+      map.on('moveend', () => {
+        const center = map.getCenter();
+        point = { lat: center.lat, lng: center.lng };
+      });
+    }
+    requestAnimationFrame(() => {
+      map.invalidateSize();
+      map.setView([point.lat, point.lng], map.getZoom(), { animate: false });
+    });
+  }
+
+  function initConfirmMap() {
+    if (!confirmMap) {
+      confirmMap = L.map('confirmMap', {
+        zoomControl: false, attributionControl: false, dragging: false,
+        touchZoom: false, doubleClickZoom: false, scrollWheelZoom: false,
+        boxZoom: false, keyboard: false
+      }).setView([point.lat, point.lng], 17);
+      makeTileLayer().addTo(confirmMap);
+    }
+    requestAnimationFrame(() => {
+      confirmMap.invalidateSize();
+      confirmMap.setView([point.lat, point.lng], 17, { animate: false });
+    });
+    $('confirmedArea').textContent = areaFor(point) + '.';
+  }
+
+  function show(screen) {
+    screens.forEach((id) => $(id).classList.toggle('active', id === screen));
+    $('resultMenu').hidden = true;
+    if (screen === 'mapStep') initMap();
+    if (screen === 'confirmStep') initConfirmMap();
+    if (screen === 'resultStep') renderResult();
+  }
+
+  function setType(type) {
+    place.type = type;
+    document.querySelectorAll('.type').forEach((button) => {
+      const selected = button.dataset.type === type;
+      button.classList.toggle('selected', selected);
+      button.setAttribute('aria-pressed', String(selected));
+    });
+  }
+
+  function shareURL() {
+    const url = new URL(origin);
+    url.searchParams.set('id', place.id);
+    url.searchParams.set('n', place.name);
+    url.searchParams.set('t', place.type);
+    url.searchParams.set('lat', place.lat.toFixed(6));
+    url.searchParams.set('lng', place.lng.toFixed(6));
+    if (place.reference) url.searchParams.set('r', place.reference);
+    return url.toString();
+  }
+
+  function renderResult() {
+    $('resultName').textContent = place.name;
+    $('resultArea').textContent = areaFor(place);
+    $('resultId').textContent = place.id;
+    if (window.PuntoQR) {
+      window.PuntoQR.toDataURL(shareURL(), { margin: 1, width: 256, color: { dark: '#111820', light: '#ffffff' } })
+        .then((data) => { $('qr').src = data; })
+        .catch(() => { $('qr').src = 'qr.svg'; });
+    }
+  }
+
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(shareURL());
+      notify('Enlace copiado');
+    } catch (_) {
+      notify('Abre el menú de compartir para copiar el enlace');
+    }
+  }
+
+  $('start').addEventListener('click', () => show('mapStep'));
+  $('confirmPoint').addEventListener('click', () => show('confirmStep'));
+  $('backToMap').addEventListener('click', () => show('mapStep'));
+  $('continueToForm').addEventListener('click', () => show('dataStep'));
+  $('backToConfirm').addEventListener('click', () => show('confirmStep'));
+  $('locate').addEventListener('click', () => {
+    if (!navigator.geolocation) return notify('Ubicación no disponible');
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        point = { lat: coords.latitude, lng: coords.longitude };
+        map.setView([point.lat, point.lng], 17, { animate: true });
+        notify('Mueve el mapa para ajustar la entrada');
+      },
+      () => notify('No se pudo obtener tu ubicación'),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  });
+  document.querySelectorAll('.type').forEach((button) => button.addEventListener('click', () => setType(button.dataset.type)));
+  $('reference').addEventListener('input', () => { $('refCount').textContent = $('reference').value.length; });
+  $('refCount').textContent = $('reference').value.length;
+  $('placeForm').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const name = $('placeName').value.trim();
+    if (!name) { $('placeName').focus(); return; }
+    place = {
+      name, type: place.type, reference: $('reference').value.trim(),
+      id: `PV-${Math.floor(1000000 + Math.random() * 9000000)}`,
+      lat: point.lat, lng: point.lng
+    };
+    localStorage.setItem('punto-place', JSON.stringify(place));
+    show('resultStep');
+  });
+  $('share').addEventListener('click', async () => {
+    if (navigator.share) {
+      try { await navigator.share({ title: `${place.name} · ${place.id}`, text: 'Mi dirección digital en Punto', url: shareURL() }); }
+      catch (error) { if (error.name !== 'AbortError') copyLink(); }
+    } else copyLink();
+  });
+  $('more').addEventListener('click', () => { $('resultMenu').hidden = !$('resultMenu').hidden; });
+  $('copyLink').addEventListener('click', () => { $('resultMenu').hidden = true; copyLink(); });
+  $('viewMap').addEventListener('click', () => {
+    window.open(`https://www.openstreetmap.org/?mlat=${place.lat}&mlon=${place.lng}#map=18/${place.lat}/${place.lng}`, '_blank', 'noopener');
+    $('resultMenu').hidden = true;
+  });
+  $('newPlace').addEventListener('click', () => {
+    $('resultMenu').hidden = true;
+    $('placeName').value = '';
+    $('reference').value = '';
+    $('refCount').textContent = '0';
+    setType('Casa');
+    show('mapStep');
+  });
+  $('mobileView').addEventListener('click', () => {
+    $('app').classList.remove('wide');
+    $('mobileView').classList.add('active');
+    $('desktopView').classList.remove('active');
+    if (map) setTimeout(() => map.invalidateSize(), 100);
+    if (confirmMap) setTimeout(() => confirmMap.invalidateSize(), 100);
+  });
+  $('desktopView').addEventListener('click', () => {
+    $('app').classList.add('wide');
+    $('desktopView').classList.add('active');
+    $('mobileView').classList.remove('active');
+    if (map) setTimeout(() => map.invalidateSize(), 100);
+    if (confirmMap) setTimeout(() => confirmMap.invalidateSize(), 100);
+  });
+  $('mobileView').classList.add('active');
+
+  const params = new URLSearchParams(location.search);
+  const sharedId = params.get('id');
+  const sharedLat = Number(params.get('lat'));
+  const sharedLng = Number(params.get('lng'));
+  if (/^PV-\d{7}$/.test(sharedId || '') && Number.isFinite(sharedLat) && Number.isFinite(sharedLng) &&
+      Math.abs(sharedLat) <= 90 && Math.abs(sharedLng) <= 180) {
+    place = {
+      id: sharedId, name: (params.get('n') || 'Mi lugar').slice(0, 48),
+      type: params.get('t') === 'Negocio' ? 'Negocio' : 'Casa',
+      reference: (params.get('r') || '').slice(0, 100), lat: sharedLat, lng: sharedLng
+    };
+    point = { lat: place.lat, lng: place.lng };
+    show('resultStep');
+  }
+})();
