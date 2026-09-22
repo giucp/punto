@@ -183,9 +183,15 @@
   function updatePreviewScale() {
     const app = $('app');
     if (window.innerWidth >= 500 && !app.classList.contains('wide') && window.innerHeight < 780) {
+      app.style.position = 'fixed';
+      app.style.left = '50%';
+      app.style.top = '50%';
       app.style.height = '760px';
-      app.style.transform = `scale(${Math.min(1, (window.innerHeight - 18) / 760)})`;
+      app.style.transform = `translate(-50%, -50%) scale(${Math.min(1, (window.innerHeight - 18) / 760)})`;
     } else {
+      app.style.position = '';
+      app.style.left = '';
+      app.style.top = '';
       app.style.height = '';
       app.style.transform = '';
     }
