@@ -15,3 +15,5 @@
 @media(min-width:500px){.city-art{width:338px;bottom:112px}}
 @media(max-width:499px) and (min-height:701px){.welcome-copy{padding-top:151px}}
 @media(max-height:700px){.city-art{width:338px;height:145px;bottom:85px;aspect-ratio:auto}.city-art img{width:1983px;height:793px;left:-34px;top:-385px}}
+.welcome{background:linear-gradient(180deg,#fffefa 0%,#fffdfa 23%,#faf7f2 54%,#fffefa 88%)}
+.city-art{mix-blend-mode:normal}
