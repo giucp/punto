@@ -263,3 +263,55 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* ---------- Escritorio ---------- */
+@media (min-width: 900px) {
+  .shell { width: 100vw; height: 100dvh; border: 0; border-radius: 0; box-shadow: none; }
+
+  /* Bienvenida en dos columnas: mensaje a la izquierda, el Ávila a la derecha. */
+  .welcome.active {
+    display: grid;
+    grid-template-columns: minmax(380px, 1fr) minmax(0, 1.25fr);
+    grid-template-rows: auto 1fr auto 1fr;
+    grid-template-areas: "brand brand" ". art" "copy art" "bottom art";
+    column-gap: 4vw;
+  }
+  .brandrow { grid-area: brand; height: 96px; padding: 38px 7vw 0; }
+  .brandrow .brand { font-size: 28px; }
+  .brandrow small { font-size: 12px; }
+  .welcome-copy { grid-area: copy; padding: 0 0 0 7vw; }
+  .welcome-copy h1 { font-size: clamp(48px, 4.6vw, 72px); letter-spacing: -2.4px; margin-bottom: 22px; }
+  .welcome-copy p { font-size: clamp(18px, 1.5vw, 22px); }
+  .welcome-bottom { grid-area: bottom; align-self: start; align-items: flex-start; padding: 40px 0 0 7vw; width: calc(7vw + 320px); gap: 12px; }
+  .welcome-bottom .primary { height: 52px; font-size: 15px; }
+  .welcome-links { justify-content: flex-start; }
+  .text-link { font-size: 13px; }
+  .city-art { grid-area: art; align-self: center; min-height: 0; padding-right: 5vw; }
+  .city-art img { position: static; max-width: 760px; margin-left: auto; }
+
+  /* Mapas a pantalla completa con la hoja flotando abajo a la izquierda. */
+  .map-page .bottom-sheet, .confirm-page .bottom-sheet {
+    position: absolute; left: 24px; bottom: 24px; width: 400px; margin: 0;
+    border-radius: 17px; padding: 24px 26px 26px; box-shadow: 0 10px 34px #1d243024;
+  }
+  .map-page .handle, .confirm-page .handle { display: none; }
+  .map-back { top: 20px; bottom: auto; }
+  .map-top { left: 70px; }
+  .search-results { left: 70px; right: auto; width: min(460px, calc(100% - 86px)); }
+  .map-page .leaflet-bottom, .confirm-page .leaflet-bottom { bottom: 0; }
+
+  /* Formulario y resultado en una columna centrada. */
+  .data-page { padding-left: max(24px, calc(50% - 230px)); padding-right: max(24px, calc(50% - 230px)); }
+  #placeForm { flex: none; }
+  #placeForm .save { margin-top: 8px; }
+  .result-page { padding-left: max(23px, calc(50% - 220px)); padding-right: max(23px, calc(50% - 220px)); }
+  .result-menu { right: max(18px, calc(50% - 215px)); }
+
+  /* Las hojas se vuelven un diálogo centrado. */
+  .sheet-modal {
+    left: 50%; right: auto; top: 50%; bottom: auto; width: 440px;
+    border-radius: 17px; padding: 28px 30px 30px; transform: translate(-50%, -50%);
+    box-shadow: 0 20px 60px #1d243033; animation: fade .2s ease;
+  }
+  .sheet-modal .handle { display: none; }
+}
