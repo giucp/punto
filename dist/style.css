@@ -18,9 +18,9 @@
 .welcome{background:linear-gradient(180deg,#fffefa 0%,#fffdfa 23%,#faf7f2 54%,#fffefa 88%)}
 .city-art{mix-blend-mode:normal}
 .art-filter{position:absolute;width:0;height:0;overflow:hidden;pointer-events:none}
-.city-art{aspect-ratio:340/265}
-.city-art img{top:-135.85%;filter:url(#artAlpha)}
-@media(max-height:700px){.city-art img{top:-360px}}
+.city-art{aspect-ratio:340/248}
+.city-art img{top:-152.02%;filter:url(#artAlpha)}
+@media(max-height:700px){.city-art img{top:-377px}}
 /* El sistema operativo dibuja la hora, batería y gesto de inicio. */
 @media(min-width:500px){.shell:not(.wide){border:1px solid #e4e5e7;border-radius:24px;box-shadow:0 14px 44px #26303c18}.shell:not(.wide):before{content:none}}
 @media(max-width:499px){.shell{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}}
