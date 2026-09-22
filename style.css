@@ -47,3 +47,10 @@
  .shell:not(.wide) .signature{margin-top:27px}
 }
 .city-art{-webkit-mask-image:linear-gradient(to right,transparent,black 2%,black 98%,transparent);mask-image:linear-gradient(to right,transparent,black 2%,black 98%,transparent)}
+@media(min-width:500px) and (max-width:899px){
+ .shell.wide .welcome-copy{width:300px;padding:100px 0 0 35px}
+ .shell.wide .welcome-copy h1{font-size:30px;line-height:1.06;letter-spacing:-.9px}
+ .shell.wide .welcome-copy p{font-size:15px}
+ .shell.wide .city-art{width:240px;height:auto;aspect-ratio:340/245;right:20px;bottom:13%}
+ .shell.wide .welcome-bottom{left:35px;right:auto;bottom:55px;width:230px}
+}
