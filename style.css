@@ -17,3 +17,7 @@
 @media(max-height:700px){.city-art{width:338px;height:145px;bottom:85px;aspect-ratio:auto}.city-art img{width:1983px;height:793px;left:-34px;top:-385px}}
 .welcome{background:linear-gradient(180deg,#fffefa 0%,#fffdfa 23%,#faf7f2 54%,#fffefa 88%)}
 .city-art{mix-blend-mode:normal}
+.art-filter{position:absolute;width:0;height:0;overflow:hidden;pointer-events:none}
+.city-art{aspect-ratio:340/265}
+.city-art img{top:-135.85%;filter:url(#artAlpha)}
+@media(max-height:700px){.city-art img{top:-360px}}
