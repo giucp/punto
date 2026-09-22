@@ -123,25 +123,13 @@
     }
   }
 
-  function placeHash(p) {
-    const q = new URLSearchParams();
-    if (p.name) q.set('n', p.name);
-    if (p.type && TYPES[p.type]) q.set('t', p.type);
-    if (p.unit) q.set('u', p.unit);
-    if (p.ref) q.set('r', p.ref);
-    if (p.area) q.set('a', p.area);
-    const query = q.toString();
-    return `#/p/${p.code}${query ? '?' + query : ''}`;
-  }
-  // Los datos van después de "#": el servidor nunca recibe nombre ni referencia.
+  // Enlace corto: solo el código (y la unidad si varios lugares comparten entrada).
+  // Nombre y referencia se buscan en Supabase, así el enlace no los expone.
+  const placeHash = (p) => `#${p.code}${p.unit ? '?u=' + encodeURIComponent(p.unit) : ''}`;
   const placeURL = (p) => `${location.origin}${location.pathname}${placeHash(p)}`;
 
-  function shareText(p) {
-    const lines = [`📍 ${p.name || 'Mi Punto'}`, `Código Punto: ${C.format(p.code)}`];
-    if (p.unit) lines.push(p.unit);
-    if (p.ref) lines.push(`Referencia: ${p.ref}`);
-    return lines.join('\n');
-  }
+  const shareTitle = (p) => [p.name || 'Mi Punto', p.unit].filter(Boolean).join(' · ');
+  const shareText = (p) => `📍 ${shareTitle(p)} · ${C.format(p.code)}`;
 
   async function copy(text, okMessage) {
     try {
@@ -160,8 +148,11 @@
     }
   }
 
-  const gmapsURL = (p) => `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`;
-  const wazeURL = (p) => `https://waze.com/ul?ll=${p.lat},${p.lng}&navigate=yes`;
+  // "search" abre el pin exacto tanto en la app de Google Maps como en la web;
+  // desde ahí "Cómo llegar" ya conoce el destino.
+  const latLng = (p) => `${p.lat.toFixed(6)},${p.lng.toFixed(6)}`;
+  const gmapsURL = (p) => `https://www.google.com/maps/search/?api=1&query=${latLng(p)}`;
+  const wazeURL = (p) => `https://waze.com/ul?ll=${latLng(p)}&navigate=yes`;
 
   /* ---------- Nombres de zona (OpenStreetMap / Nominatim) ---------- */
 
@@ -570,7 +561,17 @@
 
   function parseRoute() {
     const [path, query = ''] = location.hash.slice(1).split('?');
-    if (path.startsWith('/p/')) {
+    if (/^[0-9a-z]{9}$/i.test(path)) {
+      const decoded = C.decode(path);
+      if (decoded.error) return { screen: 'welcome', codeError: decoded.error };
+      const unit = (new URLSearchParams(query).get('u') || '').slice(0, 30);
+      const at = { code: decoded.code, lat: decoded.lat, lng: decoded.lng };
+      const same = (p) => p.code === decoded.code && (p.unit || '').toLowerCase() === unit.toLowerCase();
+      const saved = myPlaces().find(same) || (!unit && myPlaces().find((p) => p.code === decoded.code));
+      if (saved) return { screen: 'resultStep', place: { ...saved, ...at } };
+      return { screen: 'resultStep', place: { ...at, name: '', type: '', unit, ref: '', area: '' } };
+    }
+    if (path.startsWith('/p/')) { // enlaces largos anteriores
       const decoded = C.decode(decodeURIComponent(path.slice(3)));
       if (decoded.error) return { screen: 'welcome', codeError: decoded.error };
       const q = new URLSearchParams(query);
@@ -641,6 +642,8 @@
       return;
     }
     const withCoords = found.map((f) => ({ ...f, lat: p.lat, lng: p.lng }));
+    const exact = p.unit && withCoords.find((f) => f.unit.toLowerCase() === p.unit.toLowerCase());
+    if (exact) { renderResult(exact); return; }
     if (withCoords.length === 1) { renderResult(withCoords[0]); return; }
     // Varios lugares comparten la entrada (apartamentos, locales): se elige uno.
     renderResult(withCoords[0]);
@@ -661,12 +664,12 @@
     e.preventDefault();
     const value = $('codeInput').value.trim();
     if (!value) { $('codeError').textContent = 'Escribe el código que te enviaron.'; return; }
-    const linkHash = value.match(/#\/p\/.+$/); // también acepta el enlace completo pegado
+    const linkHash = value.match(/#(\/p\/.+|[0-9a-z]{9}(\?.*)?)$/i); // también acepta el enlace completo pegado
     const decoded = linkHash ? null : C.decode(value);
     if (decoded?.error) { $('codeError').textContent = decoded.error; return; }
     $('codeInput').value = '';
     closeSheets();
-    go(linkHash ? linkHash[0] : `#/p/${decoded.code}`);
+    go(linkHash ? linkHash[0] : `#${decoded.code}`);
   });
   $('codeInput').addEventListener('input', () => { $('codeError').textContent = ''; });
 
@@ -727,7 +730,7 @@
   $('share').addEventListener('click', async () => {
     const p = state.current;
     if (navigator.share) {
-      try { await navigator.share({ title: p.name || 'Mi Punto', text: shareText(p), url: placeURL(p) }); return; }
+      try { await navigator.share({ title: shareTitle(p), text: shareText(p), url: placeURL(p) }); return; }
       catch (err) { if (err.name === 'AbortError') return; }
     }
     copy(`${shareText(p)}\n${placeURL(p)}`, 'Dirección copiada para compartir');
@@ -738,7 +741,7 @@
   const menuAction = (id, fn) => $(id).addEventListener('click', () => { toggleMenu(false); fn(state.current); });
   menuAction('mCopyCode', (p) => copy(C.format(p.code), 'Código copiado'));
   menuAction('mCopyLink', (p) => copy(placeURL(p), 'Enlace copiado'));
-  menuAction('mWhatsapp', (p) => window.open(`https://wa.me/?text=${encodeURIComponent(`${shareText(p)}\n\n${placeURL(p)}`)}`, '_blank', 'noopener'));
+  menuAction('mWhatsapp', (p) => window.open(`https://wa.me/?text=${encodeURIComponent(`${shareText(p)}\n${placeURL(p)}`)}`, '_blank', 'noopener'));
   menuAction('mGmaps', (p) => window.open(gmapsURL(p), '_blank', 'noopener'));
   menuAction('mWaze', (p) => window.open(wazeURL(p), '_blank', 'noopener'));
   menuAction('mPlaque', (p) => downloadPlaque(p).catch(() => notify('No se pudo crear la placa')));
