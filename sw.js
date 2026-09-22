@@ -1,8 +1,8 @@
 // Guarda la app para que abra sin conexión. Los mosaicos del mapa y las búsquedas
 // siempre van a la red; el código Punto se decodifica en el teléfono.
-const CACHE = 'punto-v4';
+const CACHE = 'punto-v5';
 const APP_FILES = [
-  './', 'index.html', 'style.css', 'app.js', 'code.js', 'manifest.webmanifest',
+  './', 'index.html', 'style.css', 'app.js', 'code.js', 'config.js', 'manifest.webmanifest',
   'assets/avila.png', 'assets/firma.png', 'assets/icon.svg', 'assets/icon-180.png', 'assets/icon-192.png', 'assets/icon-512.png',
   'assets/leaflet.css', 'assets/leaflet.js', 'assets/qrcode.js'
 ];

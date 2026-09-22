@@ -43,18 +43,84 @@
     }
   };
 
+  /* ---------- Supabase (registro central) ---------- */
+
+  const cfg = window.PUNTO_CONFIG || {};
+  const cloud = {
+    enabled: Boolean(cfg.supabaseUrl && cfg.supabaseKey),
+    async call(fn, args) {
+      const res = await fetch(`${cfg.supabaseUrl}/rest/v1/rpc/${fn}`, {
+        method: 'POST',
+        headers: { apikey: cfg.supabaseKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify(args)
+      });
+      if (!res.ok) throw new Error(`${fn}: ${res.status}`);
+      return res.status === 204 ? null : res.json();
+    }
+  };
+
+  // Clave propia de este teléfono: permite ver, editar y borrar sus lugares en la nube.
+  function deviceSecret() {
+    let secret = store.get('punto:secret', '');
+    if (typeof secret !== 'string' || secret.length < 32) {
+      const bytes = crypto.getRandomValues(new Uint8Array(32));
+      secret = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+      store.set('punto:secret', secret);
+    }
+    return secret;
+  }
+
+  const cloudArgs = (p) => ({
+    p_secret: deviceSecret(), p_code: p.code, p_name: p.name, p_type: TYPES[p.type] ? p.type : 'casa',
+    p_unit: p.unit || '', p_ref: p.ref || '', p_area: p.area || ''
+  });
+
+  async function pushPlace(p) {
+    if (!cloud.enabled || !p.name || p.received) return; // lo que te compartieron no se sube como tuyo
+    try {
+      await cloud.call('punto_save', cloudArgs(p));
+      markSynced(p, true);
+    } catch (_) { markSynced(p, false); } // se reintenta al abrir la app
+  }
+
+  async function syncWithCloud() {
+    if (!cloud.enabled) return;
+    try {
+      for (const p of myPlaces().filter((m) => m.synced === false)) await pushPlace(p);
+      const remote = await cloud.call('punto_mine', { p_secret: deviceSecret() });
+      const local = myPlaces();
+      const keys = new Set(local.map(placeKey));
+      const added = remote.filter((r) => !keys.has(placeKey(r))).map((r) => ({ ...r, synced: true, saved: Date.parse(r.created_at) || Date.now() }));
+      if (added.length) {
+        store.set('punto:places', [...local, ...added].slice(0, 50));
+        renderWelcome();
+      }
+    } catch (_) { /* Sin conexión: se usa lo guardado en el teléfono. */ }
+  }
+
+  /* ---------- Mis puntos ---------- */
+
   const placeKey = (p) => [p.code, p.unit, p.name].map((v) => (v || '').trim().toLowerCase()).join('|');
   const myPlaces = () => store.get('punto:places', []).filter((p) => p && !C.decode(p.code || '').error);
   const isMine = (p) => myPlaces().some((m) => placeKey(m) === placeKey(p));
 
+  function markSynced(p, synced) {
+    store.set('punto:places', myPlaces().map((m) => (placeKey(m) === placeKey(p) ? { ...m, synced } : m)));
+  }
+
   function savePlace(p) {
     const { lat, lng, ...data } = p; // la ubicación se recalcula siempre desde el código
     const list = myPlaces().filter((m) => placeKey(m) !== placeKey(p));
-    list.unshift({ ...data, saved: Date.now() });
-    return store.set('punto:places', list.slice(0, 50));
+    list.unshift({ ...data, saved: Date.now(), synced: false });
+    const ok = store.set('punto:places', list.slice(0, 50));
+    pushPlace(p);
+    return ok;
   }
   function removePlace(p) {
     store.set('punto:places', myPlaces().filter((m) => placeKey(m) !== placeKey(p)));
+    if (cloud.enabled) {
+      cloud.call('punto_delete', { p_secret: deviceSecret(), p_code: p.code, p_unit: p.unit || '' }).catch(() => {});
+    }
   }
 
   function placeHash(p) {
@@ -318,11 +384,16 @@
 
   function renderResult(p) {
     state.current = p;
-    const mine = isMine(p);
+    const entry = myPlaces().find((m) => placeKey(m) === placeKey(p));
+    const saved = Boolean(entry);          // está en "Mis puntos"
+    const mine = saved && !entry.received; // lo registró este teléfono
     const page = $('resultStep');
     page.classList.toggle('received', !mine);
 
-    if (state.justSaved) {
+    if (saved && !mine) {
+      $('resultTitle').textContent = 'Punto guardado.';
+      $('resultSub').textContent = 'Ábrelo en tu app de mapas para llegar.';
+    } else if (state.justSaved) {
       $('resultTitle').textContent = 'Tu dirección digital está lista.';
       $('resultSub').textContent = 'Fácil de compartir. Difícil de perder.';
     } else if (mine) {
@@ -351,8 +422,8 @@
 
     $('gmaps').href = gmapsURL(p);
     $('waze').href = wazeURL(p);
-    $('mSave').hidden = mine;
-    $('mDelete').hidden = !mine;
+    $('mSave').hidden = saved;
+    $('mDelete').hidden = !saved;
     $('mNew').hidden = !mine;
     $('mPlaque').hidden = !mine;
 
@@ -442,7 +513,7 @@
 
   /* ---------- Hojas: código y mis puntos ---------- */
 
-  function openSheet(id) {
+  function openSheet(id, list, title) {
     closeSheets();
     $('scrim').hidden = false;
     $(id).hidden = false;
@@ -450,7 +521,11 @@
       $('codeError').textContent = '';
       setTimeout(() => $('codeInput').focus(), 50);
     }
-    if (id === 'placesSheet') renderPlacesList();
+    if (id === 'placesSheet') {
+      $('placesTitle').textContent = title || 'Mis puntos';
+      $('placesSub').textContent = list ? 'Elige a cuál vas.' : 'Guardados en este teléfono y en tu registro Punto.';
+      renderPlacesList(list || myPlaces());
+    }
   }
   function closeSheets() {
     $('scrim').hidden = true;
@@ -458,8 +533,8 @@
     $('placesSheet').hidden = true;
   }
 
-  function renderPlacesList() {
-    $('placesList').replaceChildren(...myPlaces().map((p) => {
+  function renderPlacesList(list) {
+    $('placesList').replaceChildren(...list.map((p) => {
       const li = document.createElement('li');
       const b = document.createElement('button');
       b.type = 'button';
@@ -549,7 +624,27 @@
       requestAnimationFrame(() => { confirmMap.invalidateSize(); confirmMap.setView([state.draft.lat, state.draft.lng], 18, { animate: false }); });
     } else if (r.screen === 'resultStep') {
       renderResult(r.place);
+      if (!r.place.name) lookupCode(r.place);
     }
+  }
+
+  // Solo llegó el código (dictado o escrito): se buscan sus datos en el registro central.
+  async function lookupCode(p) {
+    if (!cloud.enabled) return;
+    $('resultName').textContent = 'Buscando…';
+    let found = [];
+    try { found = await cloud.call('punto_lookup', { p_code: p.code }); } catch (_) { /* sin conexión */ }
+    if (state.current !== p) return;
+    if (!found.length) {
+      $('resultName').textContent = 'Punto';
+      $('resultSub').textContent = 'Nadie registró datos en esta entrada, pero la ubicación es exacta.';
+      return;
+    }
+    const withCoords = found.map((f) => ({ ...f, lat: p.lat, lng: p.lng }));
+    if (withCoords.length === 1) { renderResult(withCoords[0]); return; }
+    // Varios lugares comparten la entrada (apartamentos, locales): se elige uno.
+    renderResult(withCoords[0]);
+    openSheet('placesSheet', withCoords, `${withCoords.length} lugares en esta entrada`);
   }
 
   /* ---------- Eventos ---------- */
@@ -649,7 +744,7 @@
   menuAction('mPlaque', (p) => downloadPlaque(p).catch(() => notify('No se pudo crear la placa')));
   menuAction('mNew', () => $('start').click());
   menuAction('mSave', (p) => {
-    if (!savePlace(p)) { notify('No se pudo guardar en este navegador'); return; }
+    if (!savePlace({ ...p, received: true })) { notify('No se pudo guardar en este navegador'); return; }
     notify('Guardado en tus puntos');
     renderResult(p);
   });
@@ -666,6 +761,7 @@
   $('layer').setAttribute('aria-pressed', String(state.satellite));
   window.addEventListener('hashchange', route);
   route();
+  syncWithCloud();
 
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
