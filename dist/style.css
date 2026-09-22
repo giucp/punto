@@ -83,7 +83,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
    sube por detrás del texto (arriba solo tiene cielo y el sol). */
 .city-art { flex: 1; min-height: 150px; position: relative; pointer-events: none; }
 .city-art img {
-  position: absolute; left: 0; bottom: 0; display: block; width: 100%; height: auto;
+  position: absolute; left: -12%; bottom: 0; display: block; width: 124%; height: auto;
   -webkit-mask-image: linear-gradient(to right, transparent, #000 3%, #000 97%, transparent);
   mask-image: linear-gradient(to right, transparent, #000 3%, #000 97%, transparent);
 }
