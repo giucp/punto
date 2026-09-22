@@ -9,3 +9,9 @@
 @media(max-width:499px){body{display:block;background:#fffefa}.shell{width:100vw;height:100svh;max-height:none}.preview-tools{display:none}.city-art{bottom:116px}.welcome-copy{padding-top:91px}.map-page .leaflet-map{bottom:210px}.map-crosshair{top:calc((100% - 210px)/2)}.selected-dot{top:calc((100% - 210px)/2)}.bottom-sheet,.confirm-sheet{height:225px}.confirm-map{bottom:210px}.data-page{padding:0 24px}.result-page{padding:0 23px}}
 @media(max-height:700px){.welcome-copy{padding-top:42px}.welcome-copy h1{font-size:34px}.city-art{height:145px;bottom:85px}.city-art img{top:-385px}.welcome-bottom{bottom:15px;gap:9px}.progress-dots{margin:10px 0 20px}#placeForm{height:calc(100% - 118px)}#placeForm h2{margin-bottom:18px}#placeForm input{margin-bottom:15px}.types{margin-bottom:18px;height:80px}.type{height:80px}.result-intro{margin:8px 0 13px}.place-card{padding:13px}.place-card h3{font-size:25px}.place-card p{margin-bottom:8px}.place-card strong{margin-bottom:7px}.place-card img{width:90px;height:90px}.signature{margin-top:13px}.bottom-sheet,.confirm-sheet{height:190px;padding-bottom:17px}.handle{margin-bottom:12px}.bottom-sheet p{margin-bottom:12px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+/* Ajuste de la ilustración original al alto real del teléfono. */
+.city-art{width:min(100%,390px);height:auto;aspect-ratio:340/244;bottom:105px;mix-blend-mode:multiply}
+.city-art img{width:583.24%;height:auto;left:-10%;top:-156.56%}
+@media(min-width:500px){.city-art{width:338px;bottom:112px}}
+@media(max-width:499px) and (min-height:701px){.welcome-copy{padding-top:151px}}
+@media(max-height:700px){.city-art{width:338px;height:145px;bottom:85px;aspect-ratio:auto}.city-art img{width:1983px;height:793px;left:-34px;top:-385px}}

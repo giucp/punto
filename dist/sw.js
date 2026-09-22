@@ -1,5 +1,5 @@
-const CACHE = 'punto-shell-v1';
-const APP_FILES = ['/', '/index.html', '/style.css', '/app.js', '/manifest.webmanifest', '/assets/icon.svg', '/assets/leaflet.css', '/assets/leaflet.js', '/assets/qrcode.js', '/mockup.png', '/qr.svg'];
+const CACHE = 'punto-shell-v2';
+const APP_FILES = ['/', '/index.html', '/style.css', '/app.js', '/manifest.webmanifest', '/assets/icon.svg', '/assets/icon-180.png', '/assets/icon-192.png', '/assets/icon-512.png', '/assets/leaflet.css', '/assets/leaflet.js', '/assets/qrcode.js', '/mockup.png', '/qr.svg'];
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(APP_FILES)).then(() => self.skipWaiting()));
 });
@@ -12,6 +12,12 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     event.respondWith(fetch(request).catch(() => caches.match('/index.html')));
   } else {
-    event.respondWith(caches.match(request).then((cached) => cached || fetch(request)));
+    event.respondWith(fetch(request).then((response) => {
+      if (response.ok) {
+        const copy = response.clone();
+        caches.open(CACHE).then((cache) => cache.put(request, copy));
+      }
+      return response;
+    }).catch(() => caches.match(request)));
   }
 });
