@@ -72,7 +72,7 @@
 
   const cloudArgs = (p) => ({
     p_secret: deviceSecret(), p_code: p.code, p_name: p.name, p_type: TYPES[p.type] ? p.type : 'casa',
-    p_unit: p.unit || '', p_ref: p.ref || '', p_area: p.area || ''
+    p_unit: p.unit || '', p_ref: p.ref || '', p_area: p.area || '', p_state: p.state || ''
   });
 
   async function pushPlace(p) {
@@ -129,7 +129,7 @@
   const placeURL = (p) => `${location.origin}${location.pathname}${placeHash(p)}`;
 
   const shareTitle = (p) => [p.name || 'Mi Punto', p.unit].filter(Boolean).join(' · ');
-  const shareText = (p) => `📍 ${shareTitle(p)} · ${C.format(p.code)}`;
+  const shareText = (p) => `📍 ${shareTitle(p)} · ${C.format(p.code, p.state)}`;
 
   async function copy(text, okMessage) {
     try {
@@ -157,7 +157,6 @@
   /* ---------- Nombres de zona (OpenStreetMap / Nominatim) ---------- */
 
   const areaCache = new Map();
-  let areaController;
 
   function areaFromAddress(a = {}) {
     const local = a.neighbourhood || a.suburb || a.quarter || a.residential || a.hamlet || a.village;
@@ -165,18 +164,28 @@
     return [local, city].filter((v, i, arr) => v && arr.indexOf(v) === i).join(', ');
   }
 
-  async function reverseArea(lat, lng) {
+  // Zona legible, estado (letra ISO 3166-2:VE) y país del punto.
+  // Se guarda la promesa: consultas simultáneas del mismo punto comparten una sola petición.
+  function reverseInfo(lat, lng) {
     const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
-    if (areaCache.has(key)) return areaCache.get(key);
-    areaController?.abort();
-    areaController = new AbortController();
-    const url = `${NOMINATIM}/reverse?format=jsonv2&zoom=17&accept-language=es&lat=${lat}&lon=${lng}`;
-    const res = await fetch(url, { signal: areaController.signal });
-    if (!res.ok) throw new Error('reverse');
-    const area = areaFromAddress((await res.json()).address);
-    areaCache.set(key, area);
-    return area;
+    if (!areaCache.has(key)) {
+      const url = `${NOMINATIM}/reverse?format=jsonv2&zoom=17&accept-language=es&lat=${lat}&lon=${lng}`;
+      const request = fetch(url)
+        .then((res) => { if (!res.ok) throw new Error('reverse'); return res.json(); })
+        .then(({ address = {} }) => ({
+          area: areaFromAddress(address),
+          state: C.stateFromISO(address['ISO3166-2-lvl4']),
+          country: address.country_code || ''
+        }))
+        .catch((err) => { areaCache.delete(key); throw err; });
+      areaCache.set(key, request);
+    }
+    return areaCache.get(key);
   }
+  const reverseArea = async (lat, lng) => (await reverseInfo(lat, lng)).area;
+
+  // Solo territorio venezolano reconocido. Sin conexión no se puede comprobar y se permite.
+  const outsideVenezuela = (info) => Boolean(info?.country) && info.country !== 've';
 
   /* ---------- Mapas ---------- */
 
@@ -260,9 +269,20 @@
     if (!C.inCoverage(c.lat, c.lng)) { $('pillText').textContent = 'Fuera de Venezuela'; return; }
     if (map.getZoom() < 13) return;
     try {
-      const area = await reverseArea(c.lat, c.lng);
-      if (area) $('pillText').textContent = area;
+      const info = await reverseInfo(c.lat, c.lng);
+      if (outsideVenezuela(info)) {
+        $('pillText').textContent = 'Fuera de Venezuela';
+        showOutside();
+        return;
+      }
+      if (info.area) $('pillText').textContent = info.area;
     } catch (_) { /* Se conserva el último nombre. */ }
+  }
+
+  function showOutside() {
+    $('mapHint').textContent = 'Esta ubicación está fuera del territorio venezolano.';
+    $('mapHint').classList.add('warn');
+    $('confirmPoint').disabled = true;
   }
 
   function locate({ quiet = false } = {}) {
@@ -399,15 +419,19 @@
     $('resultName').textContent = p.name || (TYPES[p.type]?.label ?? 'Punto');
     const areaText = () => [p.unit, p.area].filter(Boolean).join(' · ');
     $('resultArea').textContent = areaText() || 'Venezuela';
-    $('resultId').textContent = C.format(p.code);
+    $('resultId').textContent = C.format(p.code, p.state);
     $('resultRef').hidden = !p.ref;
     $('resultRef').textContent = p.ref ? `“${p.ref}”` : '';
 
-    if (!p.area) {
-      reverseArea(p.lat, p.lng).then((area) => {
-        if (state.current !== p || !area) return;
-        p.area = area;
-        $('resultArea').textContent = areaText();
+    // Completa zona y estado si faltan (lugares anteriores o códigos escritos a mano).
+    if (!p.area || !p.state) {
+      reverseInfo(p.lat, p.lng).then((info) => {
+        if (state.current !== p) return;
+        p.area = p.area || info.area;
+        p.state = p.state || info.state;
+        $('resultArea').textContent = areaText() || 'Venezuela';
+        $('resultId').textContent = C.format(p.code, p.state);
+        if (mine && info.state && !entry.state) savePlace({ ...entry, state: info.state });
       }).catch(() => {});
     }
 
@@ -479,7 +503,7 @@
     ctx.fill();
     ctx.fillStyle = '#20365d';
     ctx.font = font(800, 76);
-    ctx.fillText(C.format(p.code), W / 2, 488);
+    ctx.fillText(C.format(p.code, p.state), W / 2, 488);
 
     const qr = document.createElement('canvas');
     await window.PuntoQR.toCanvas(qr, placeURL(p), { width: 560, margin: 0, color: { dark: '#111820', light: '#ffffff' } });
@@ -490,7 +514,7 @@
     ctx.fillText('Escanea para llegar', W / 2, 1220);
 
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-    const filename = `punto-${C.format(p.code)}.png`;
+    const filename = `punto-${C.format(p.code, p.state)}.png`;
     const file = new File([blob], filename, { type: 'image/png' });
     if (navigator.canShare?.({ files: [file] }) && matchMedia('(pointer: coarse)').matches) {
       try { await navigator.share({ files: [file], title: 'Mi placa Punto' }); return; } catch (e) { if (e.name === 'AbortError') return; }
@@ -537,7 +561,7 @@
       const name = document.createElement('b');
       name.textContent = [p.name, p.unit].filter(Boolean).join(' · ');
       const code = document.createElement('small');
-      code.textContent = C.format(p.code);
+      code.textContent = C.format(p.code, p.state);
       txt.append(name, code);
       b.append(icon, txt);
       b.addEventListener('click', () => { closeSheets(); go(placeHash(p)); });
@@ -618,7 +642,7 @@
     } else if (r.screen === 'mapStep') {
       initMap();
       openSearch(false);
-      requestAnimationFrame(() => { map.invalidateSize(); updateMapHint(); updatePill(); });
+      setTimeout(() => { map.invalidateSize(); updateMapHint(); updatePill(); }, 30);
       if (!state.locatedOnce) { state.locatedOnce = true; locate({ quiet: true }); }
     } else if (r.screen === 'confirmStep') {
       renderConfirm();
@@ -687,14 +711,21 @@
   $('locate').addEventListener('click', () => locate());
   $('layer').addEventListener('click', () => setSatellite(!state.satellite));
 
-  $('confirmPoint').addEventListener('click', () => {
+  $('confirmPoint').addEventListener('click', async () => {
     const c = map.getCenter();
     const code = C.encode(c.lat, c.lng);
     if (!code) return;
     const { lat, lng } = C.decode(code); // centro de la celda: igual a lo que verá quien reciba el código
-    const pill = $('pillText').textContent;
-    const area = /Fuera|Caracas, Distrito Capital/.test(pill) ? '' : pill;
-    state.draft = { code, lat, lng, area };
+    const btn = $('confirmPoint');
+    btn.disabled = true;
+    // Comprueba país y estado antes de seguir (máx. 5 s; sin conexión se continúa).
+    const info = await Promise.race([
+      reverseInfo(lat, lng).catch(() => null),
+      new Promise((resolve) => setTimeout(() => resolve(null), 5000))
+    ]);
+    btn.disabled = false;
+    if (outsideVenezuela(info)) { showOutside(); return; }
+    state.draft = { code, lat, lng, area: info?.area || '', state: info?.state || '' };
     go('#/aqui');
   });
 
@@ -725,7 +756,7 @@
     go(placeHash(place), true);
   });
 
-  $('resultId').addEventListener('click', () => copy(C.format(state.current.code), 'Código copiado'));
+  $('resultId').addEventListener('click', () => copy(C.format(state.current.code, state.current.state), 'Código copiado'));
 
   $('share').addEventListener('click', async () => {
     const p = state.current;
@@ -739,7 +770,7 @@
   $('more').addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(); });
   document.addEventListener('click', (e) => { if (!$('resultMenu').hidden && !$('resultMenu').contains(e.target)) toggleMenu(false); });
   const menuAction = (id, fn) => $(id).addEventListener('click', () => { toggleMenu(false); fn(state.current); });
-  menuAction('mCopyCode', (p) => copy(C.format(p.code), 'Código copiado'));
+  menuAction('mCopyCode', (p) => copy(C.format(p.code, p.state), 'Código copiado'));
   menuAction('mCopyLink', (p) => copy(placeURL(p), 'Enlace copiado'));
   menuAction('mWhatsapp', (p) => window.open(`https://wa.me/?text=${encodeURIComponent(`${shareText(p)}\n${placeURL(p)}`)}`, '_blank', 'noopener'));
   menuAction('mGmaps', (p) => window.open(gmapsURL(p), '_blank', 'noopener'));

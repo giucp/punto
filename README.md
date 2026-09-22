@@ -34,3 +34,10 @@ npx http-server -p 5173 -c-1
 - Los puntos guardados viven en el teléfono (no hay cuentas ni base central).
 - Corregir la entrada cambia el código, porque el código es la ubicación.
 - La búsqueda usa Nominatim (1 consulta/segundo); para uso masivo hace falta un servicio propio.
+
+## Sigla del estado
+El código se muestra con la sigla del estado: `PV·BAR-HPC-6WN-G1B`. La sigla sale de la letra oficial
+ISO 3166-2:VE que devuelve OpenStreetMap (VE-E → BAR) y se guarda con el lugar. Es solo de lectura:
+el código real son los 9 caracteres, y al buscar se acepta con o sin sigla.
+Los puntos que OpenStreetMap ubica fuera de Venezuela (incluida la Zona en Reclamación) no se pueden registrar.
+Base de datos: correr `supabase/punto.sql` y luego `supabase/punto-2-estado.sql`.

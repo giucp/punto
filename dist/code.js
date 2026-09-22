@@ -50,10 +50,25 @@
     return data + checkChar(data);
   }
 
-  // Acepta minúsculas, espacios, guiones, el prefijo PV y confusiones típicas (O→0, I/L→1).
+  // Estados según ISO 3166-2:VE (la letra oficial) con una sigla legible de 3 letras.
+  // La sigla es solo de lectura: el código real son los 9 caracteres y no depende de límites políticos.
+  const STATES = {
+    A: ['DCA', 'Distrito Capital'], B: ['ANZ', 'Anzoátegui'], C: ['APU', 'Apure'], D: ['ARA', 'Aragua'],
+    E: ['BAR', 'Barinas'], F: ['BOL', 'Bolívar'], G: ['CAR', 'Carabobo'], H: ['COJ', 'Cojedes'],
+    I: ['FAL', 'Falcón'], J: ['GUA', 'Guárico'], K: ['LAR', 'Lara'], L: ['MER', 'Mérida'],
+    M: ['MIR', 'Miranda'], N: ['MON', 'Monagas'], O: ['NES', 'Nueva Esparta'], P: ['POR', 'Portuguesa'],
+    R: ['SUC', 'Sucre'], S: ['TAC', 'Táchira'], T: ['TRU', 'Trujillo'], U: ['YAR', 'Yaracuy'],
+    V: ['ZUL', 'Zulia'], W: ['DEP', 'Dependencias Federales'], X: ['LGU', 'La Guaira'],
+    Y: ['DAM', 'Delta Amacuro'], Z: ['AMA', 'Amazonas']
+  };
+  const ABBRS = new Set(Object.values(STATES).map(([abbr]) => abbr));
+
+  // Acepta minúsculas, espacios, guiones, el prefijo PV, la sigla del estado y
+  // confusiones típicas (O→0, I/L→1).
   function normalize(input) {
     let s = String(input || '').toUpperCase().replace(/[\s\-_.·]/g, '');
     if (s.startsWith('PV')) s = s.slice(2);
+    if (s.length === DATA_LEN + 4 && ABBRS.has(s.slice(0, 3))) s = s.slice(3);
     s = s.replace(/O/g, '0').replace(/[IL]/g, '1');
     return s;
   }
@@ -81,11 +96,19 @@
     };
   }
 
-  function format(code) {
-    return `PV-${code.slice(0, 3)}-${code.slice(3, 6)}-${code.slice(6, 9)}`;
+  // state: letra ISO del estado (opcional). PV·DCA-PS1-ZTJ-QEW o PV-PS1-ZTJ-QEW.
+  function format(code, state) {
+    const abbr = STATES[state]?.[0];
+    return `PV${abbr ? '·' + abbr : ''}-${code.slice(0, 3)}-${code.slice(3, 6)}-${code.slice(6, 9)}`;
   }
 
-  const api = { encode, decode, format, normalize, inCoverage, BOUNDS };
+  // "VE-A" → "A"; cualquier otra cosa → ''.
+  function stateFromISO(iso) {
+    const m = /^VE-([A-Z])$/.exec(iso || '');
+    return m && STATES[m[1]] ? m[1] : '';
+  }
+
+  const api = { encode, decode, format, normalize, inCoverage, stateFromISO, STATES, BOUNDS };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.PuntoCode = api;
 })(this);
