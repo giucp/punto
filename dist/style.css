@@ -46,3 +46,4 @@
  .shell:not(.wide) .place-card img{width:112px;height:112px}
  .shell:not(.wide) .signature{margin-top:27px}
 }
+.city-art{-webkit-mask-image:linear-gradient(to right,transparent,black 2%,black 98%,transparent);mask-image:linear-gradient(to right,transparent,black 2%,black 98%,transparent)}
