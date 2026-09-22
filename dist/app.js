@@ -166,6 +166,7 @@
     $('app').classList.remove('wide');
     $('mobileView').classList.add('active');
     $('desktopView').classList.remove('active');
+    updatePreviewScale();
     if (map) setTimeout(() => map.invalidateSize(), 100);
     if (confirmMap) setTimeout(() => confirmMap.invalidateSize(), 100);
   });
@@ -173,10 +174,26 @@
     $('app').classList.add('wide');
     $('desktopView').classList.add('active');
     $('mobileView').classList.remove('active');
+    updatePreviewScale();
     if (map) setTimeout(() => map.invalidateSize(), 100);
     if (confirmMap) setTimeout(() => confirmMap.invalidateSize(), 100);
   });
   $('mobileView').classList.add('active');
+
+  function updatePreviewScale() {
+    const app = $('app');
+    if (window.innerWidth >= 500 && !app.classList.contains('wide') && window.innerHeight < 780) {
+      app.style.height = '760px';
+      app.style.transform = `scale(${Math.min(1, (window.innerHeight - 18) / 760)})`;
+    } else {
+      app.style.height = '';
+      app.style.transform = '';
+    }
+    if (map) requestAnimationFrame(() => map.invalidateSize());
+    if (confirmMap) requestAnimationFrame(() => confirmMap.invalidateSize());
+  }
+  window.addEventListener('resize', updatePreviewScale);
+  updatePreviewScale();
 
   const params = new URLSearchParams(location.search);
   const sharedId = params.get('id');
